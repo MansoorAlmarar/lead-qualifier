@@ -2,7 +2,7 @@
 
 Enter a lead, click **Analyze**, and an AI workflow scores it and suggests a next step.
 
-**Live demo:** _add the Vercel URL here after deploying_
+**Live demo:** https://lead-qualifier-taupe.vercel.app
 
 Built to practice an agentic workflow end to end: a Next.js frontend on Vercel that triggers a backend task on Trigger.dev, which calls an LLM through OpenRouter.
 
