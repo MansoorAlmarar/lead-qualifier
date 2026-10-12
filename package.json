@@ -1,0 +1,30 @@
+{
+  "name": "lead-qualifier",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MansoorAlmarar/lead-qualifier.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/MansoorAlmarar/lead-qualifier/issues"
+  },
+  "homepage": "https://github.com/MansoorAlmarar/lead-qualifier#readme",
+  "dependencies": {
+    "@trigger.dev/sdk": "4.7.3",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@trigger.dev/build": "4.7.3",
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.3"
+  }
+}
