@@ -65,5 +65,5 @@ Requires Node 20+, a Trigger.dev account, an OpenRouter API key and a Supabase p
 
 ## Notes
 
-- The default model is a free OpenRouter model, which can be rate limited. Change the model in `tools/qualify-lead.ts` for more reliable results.
+- The task tries a paid model first (`openai/gpt-4o-mini`). If OpenRouter reports no credit, a rate limit or a provider error, it retries with free models, which can be rate limited. Change the lists in `tools/qualify-lead.ts`.
 - Demo data is fictional. Please do not enter real personal information. Leads you submit are stored in Supabase under your account.
