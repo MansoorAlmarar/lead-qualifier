@@ -1,8 +1,14 @@
+import { Suspense } from "react";
+import { AppNav } from "@/components/AppNav";
 import { LeadQualifier } from "@/components/LeadQualifier";
 
 export default function Home() {
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12 sm:px-6 sm:py-16">
+      <Suspense fallback={<div className="mb-8 h-12" />}>
+        <AppNav />
+      </Suspense>
+
       <header className="mb-10 max-w-2xl">
         <p className="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
           AI workflow demo

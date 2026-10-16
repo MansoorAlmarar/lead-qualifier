@@ -1,6 +1,7 @@
 import { runs } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 import type { QualificationResult, RunState } from "@/lib/schema";
+import { createClient } from "@/lib/supabase/server";
 
 const FAILED = new Set([
   "FAILED",
@@ -18,13 +19,36 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/runs/[id]">
     return Response.json({ error: "Invalid run id" }, { status: 400 });
   }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: "Please log in." }, { status: 401 });
+
+  // Row-level security means this only finds the caller's own runs.
+  const { data: row } = await supabase
+    .from("lead_history")
+    .select("status, result")
+    .eq("run_id", id)
+    .maybeSingle();
+  if (!row) return Response.json({ error: "Run not found." }, { status: 404 });
+
+  if (row.status === "done") {
+    return Response.json({ status: "done", result: row.result } satisfies RunState);
+  }
+  if (row.status === "failed") {
+    return Response.json({ status: "failed" } satisfies RunState);
+  }
+
   try {
     const run = await runs.retrieve(id);
     let state: RunState;
     if (run.status === "COMPLETED") {
       state = { status: "done", result: run.output as QualificationResult };
+      await supabase.from("lead_history").update({ status: "done", result: state.result }).eq("run_id", id);
     } else if (FAILED.has(run.status)) {
       state = { status: "failed" };
+      await supabase.from("lead_history").update({ status: "failed" }).eq("run_id", id);
     } else {
       state = { status: "pending" };
     }
