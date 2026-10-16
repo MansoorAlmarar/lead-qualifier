@@ -5,7 +5,7 @@ async function LoginForm({ searchParams }: { searchParams: Promise<{ error?: str
   const { error } = await searchParams;
   return (
     <AuthForm
-      initialError={error === "confirm" ? "That confirmation link is invalid or expired. Sign up again." : undefined}
+      initialError={error === "confirm" ? "We could not sign you in from that link. If you just confirmed your email, log in below with your password. If the link is expired, sign up again." : undefined}
     />
   );
 }
