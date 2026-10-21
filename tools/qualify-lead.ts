@@ -6,10 +6,11 @@ import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
 // The paid model is tried first. If OpenRouter refuses it (out of credit, rate limited or down),
 // the task retries with the free models, which need no credit but share rate-limited pools.
 const PAID_MODELS = ["openai/gpt-4o-mini"];
+// OpenRouter accepts at most 3 models per request.
 const FREE_MODELS = [
-  "google/gemma-4-31b-it:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "google/gemma-4-26b-a4b-it:free",
+  "minimax/minimax-m3.1-flash:free",
+  "poolside/laguna-s-2.1:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
 ];
 
 // 402 = out of credit, 429 = rate limited, 5xx = provider trouble.

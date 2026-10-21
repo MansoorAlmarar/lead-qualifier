@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Usage } from "@/lib/billing";
 import type { Lead, QualificationResult, RunState } from "@/lib/schema";
 import { SAMPLES } from "@/lib/samples";
+import { PlanBar } from "./PlanBar";
 
 type Phase =
   | { kind: "idle" }
@@ -50,7 +52,39 @@ function Field({
 export function LeadQualifier() {
   const [lead, setLead] = useState<Lead>(EMPTY);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const [usage, setUsage] = useState<Usage | null>(null);
   const runToken = useRef(0);
+
+  const refreshUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/billing/status");
+      if (!res.ok) return null;
+      const next = (await res.json()) as Usage;
+      setUsage(next);
+      return next;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const first = await refreshUsage();
+      // Coming back from Stripe Checkout: the webhook can take a few seconds to mark the user as Pro.
+      const fromStripe = document.referrer.includes("stripe.com");
+      let latest = first;
+      for (let i = 0; fromStripe && latest?.plan === "free" && i < 6 && !cancelled; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        latest = await refreshUsage();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshUsage]);
+
+  const limitReached = usage?.limit != null && usage.used >= usage.limit;
 
   const set = (key: keyof Lead) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setLead((l) => ({ ...l, [key]: e.target.value }));
@@ -83,6 +117,7 @@ export function LeadQualifier() {
         if (!poll.ok) throw new Error(state.error ?? "Could not read the result.");
         if (state.status === "done") {
           setPhase({ kind: "done", result: state.result });
+          void refreshUsage();
           return;
         }
         if (state.status === "failed") {
@@ -93,6 +128,7 @@ export function LeadQualifier() {
     } catch (err) {
       if (token !== runToken.current) return;
       setPhase({ kind: "error", message: err instanceof Error ? err.message : "Something went wrong." });
+      void refreshUsage();
     }
   }
 
@@ -100,6 +136,9 @@ export function LeadQualifier() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
+      <div className="lg:col-span-2">
+        <PlanBar usage={usage} />
+      </div>
       <form onSubmit={analyze} className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-zinc-500">Try a sample:</span>
@@ -145,10 +184,10 @@ export function LeadQualifier() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || limitReached}
           className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Analyzing…" : "Analyze"}
+          {loading ? "Analyzing…" : limitReached ? "Daily limit reached" : "Analyze"}
         </button>
       </form>
 

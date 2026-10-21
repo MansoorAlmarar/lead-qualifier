@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+// /api/stripe/webhook is called by Stripe, which has no login. The route verifies Stripe's signature.
+const PUBLIC_PATHS = ["/login", "/auth", "/api/stripe/webhook"];
 
 // Refreshes the auth cookie and blocks logged-out visitors from everything except PUBLIC_PATHS.
 export async function updateSession(request: NextRequest) {

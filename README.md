@@ -1,6 +1,6 @@
 # AI Lead Qualifier
 
-Sign up, enter a lead, click **Analyze**, and an AI workflow scores it and suggests a next step. Your past leads are saved to a private history.
+Sign up, enter a lead, click **Analyze**, and an AI workflow scores it and suggests a next step. Your past leads are saved to a private history. The free plan includes 2 analyses per day. Pro ($29/month, Stripe test mode) is unlimited.
 
 **Live demo:** https://lead-qualifier-taupe.vercel.app
 
@@ -20,6 +20,7 @@ Next.js route (Vercel, server-side)  --tasks.trigger-->  Trigger.dev task "quali
 
 - Supabase handles sign-up and login. A proxy (`frontend/proxy.ts`) sends logged-out visitors to `/login`, and the API routes check the user again.
 - Each analysis is saved to a `lead_history` table. Row-level security means users can only read and write their own rows.
+- Stripe Checkout handles payment and the Stripe customer portal handles cancel and card changes. A webhook (`/api/stripe/webhook`, signature verified) keeps a `subscriptions` table in sync. Free users are limited to 2 runs per day (resets at midnight Dubai time), counted from `lead_history`. Failed runs do not count.
 - The Trigger.dev secret key lives only in the server routes. It never reaches the browser.
 - Lead input is validated with zod in the route and again inside the task.
 - The LLM must return JSON. The task validates it before returning.
@@ -45,6 +46,7 @@ tools/                        Trigger.dev task, prompt, schemas
 trigger.config.ts             Trigger.dev project config
 frontend/                     Next.js app (deployed to Vercel)
 supabase/schema.sql           history table and row-level security policies
+supabase/billing.sql          subscriptions table (written by the Stripe webhook)
 ```
 
 ## Run locally
@@ -53,10 +55,11 @@ Requires Node 20+, a Trigger.dev account, an OpenRouter API key and a Supabase p
 
 1. Install: `npm install` in the root and in `frontend/`.
 2. Set `OPENROUTER_API_KEY` in your Trigger.dev project (Development environment).
-3. Run `supabase/schema.sql` in the Supabase SQL Editor.
-4. Copy `frontend/.env.example` to `frontend/.env.local`. Add your Trigger.dev Development secret key and the Supabase project URL and publishable key.
+3. Run `supabase/schema.sql` and `supabase/billing.sql` in the Supabase SQL Editor.
+4. Copy `frontend/.env.example` to `frontend/.env.local`. Add your Trigger.dev Development secret key, the Supabase project URL, publishable key and secret key, and your Stripe test secret key and Price ID.
 5. In the root: `npx trigger.dev@latest dev`
-6. In `frontend/`: `npm run dev`, then open http://localhost:3000
+6. Install the Stripe CLI, run `stripe login`, then `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Put the `whsec_...` it prints in `STRIPE_WEBHOOK_SECRET`.
+7. In `frontend/`: `npm run dev`, then open http://localhost:3000. Pay with test card `4242 4242 4242 4242`.
 
 ## Deploy
 

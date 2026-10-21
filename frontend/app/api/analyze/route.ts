@@ -1,5 +1,6 @@
 import { tasks } from "@trigger.dev/sdk";
 import { leadSchema } from "@/lib/schema";
+import { getUsage } from "@/lib/billing";
 import { rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,6 +13,17 @@ export async function POST(request: Request) {
 
   if (!rateLimit(user.id)) {
     return Response.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+  }
+
+  const usage = await getUsage(supabase);
+  if (usage.limit !== null && usage.used >= usage.limit) {
+    return Response.json(
+      {
+        error: `You have used your ${usage.limit} free analyses for today. Upgrade to Pro for unlimited runs.`,
+        code: "limit_reached",
+      },
+      { status: 402 },
+    );
   }
 
   const body = await request.json().catch(() => null);
