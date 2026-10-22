@@ -40,7 +40,7 @@ Demo business: a small agency selling AI automation services to other businesses
 ```
 
 ## Tools used
-- `tools/` qualify-lead task (to be created)
+- `tools/qualify-lead.ts`: the Trigger.dev task that validates the lead, calls the LLM through OpenRouter and returns validated JSON.
 
 ## Edge cases
 - Very little information: lower the score and say what is missing.

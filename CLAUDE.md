@@ -1,6 +1,6 @@
 # AI Lead Qualifier: WAT Framework
 
-This project lives in its own git repo inside AIS-OS (`AIS-OS/lead-qualifier/`). The parent AIS-OS CLAUDE.md (STOIC) also applies: be direct, short sentences, no em dashes, bullets over paragraphs.
+Standing instructions for the coding agent working on this repo. Style: be direct, use short sentences, no em dashes, bullets over paragraphs.
 
 ## What this project is
 An AI Lead Qualifier. The user submits information about a lead (name, company, role, budget, need, timeline, source, notes). An AI step scores and qualifies it and returns a structured result (qualified / not qualified, score, reasoning, suggested next step).
