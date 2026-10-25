@@ -52,7 +52,7 @@ export function PlanBar({ usage }: { usage: Usage | null }) {
             onClick={() => goTo("/api/billing/checkout", setError, setBusy)}
             className={`${button} bg-indigo-600 text-white hover:bg-indigo-500`}
           >
-            {busy ? "Opening…" : "Upgrade to Pro, $29/month"}
+            {busy ? "Opening…" : "Upgrade to Pro, $29/month (test mode)"}
           </button>
         ) : (
           <button

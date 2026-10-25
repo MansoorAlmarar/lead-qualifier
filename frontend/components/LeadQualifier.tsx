@@ -141,7 +141,7 @@ export function LeadQualifier() {
       </div>
       <form onSubmit={analyze} className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-zinc-500">Try a sample:</span>
+          <span className="text-xs font-medium text-zinc-500">Fill a sample lead:</span>
           {SAMPLES.map((s) => (
             <button
               key={s.label}
@@ -236,7 +236,14 @@ function ResultCard({ result }: { result: QualificationResult }) {
         </span>
       </div>
 
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+      <div
+        role="progressbar"
+        aria-label="Lead score"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(result.score)}
+        className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+      >
         <div className={`h-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, result.score))}%` }} />
       </div>
 
