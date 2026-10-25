@@ -23,7 +23,7 @@ async function HistoryList() {
 
   return (
     <>
-      {error && <p className="mt-6 text-sm text-red-600">Could not load your history.</p>}
+      {error && <p className="mt-6 text-sm text-red-600 dark:text-red-400">Could not load your history.</p>}
       {!error && rows.length === 0 && (
         <p className="mt-8 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
           No leads yet. Qualify one and it shows up here.
@@ -47,7 +47,7 @@ async function HistoryList() {
               <div className="mt-3 space-y-1 text-sm">
                 <p>
                   <span
-                    className={r.result.qualified ? "font-semibold text-emerald-600" : "font-semibold text-amber-600"}
+                    className={r.result.qualified ? "font-semibold text-emerald-700 dark:text-emerald-400" : "font-semibold text-amber-700 dark:text-amber-400"}
                   >
                     {r.result.qualified ? "Qualified" : "Not qualified"}
                   </span>
@@ -74,8 +74,8 @@ export default function HistoryPage() {
       <Suspense fallback={<div className="mb-8 h-12" />}>
         <AppNav />
       </Suspense>
-      <h1 className="text-3xl font-semibold tracking-tight">Your history</h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Only you can see these.</p>
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Your history</h1>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Your last 100 analyses. Only you can see these.</p>
       <Suspense fallback={<p className="mt-8 text-sm text-zinc-500">Loading...</p>}>
         <HistoryList />
       </Suspense>
