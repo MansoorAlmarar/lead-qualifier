@@ -92,7 +92,7 @@ Requires Node 20+, a Trigger.dev account, an OpenRouter API key, a Supabase proj
 5. In the root: `npx trigger.dev@latest dev`
 6. Install the Stripe CLI, run `stripe login`, then `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Put the signing secret it prints in `STRIPE_WEBHOOK_SECRET`.
 7. In `frontend/`: `npm run dev`, then open http://localhost:3000. Pay with Stripe's test card `4242 4242 4242 4242`.
-8. Checks: `npm run lint` and `npm run build` in `frontend/`.
+8. Checks, in `frontend/`: `npm run lint`, `npm test` and `npm run build`.
 
 ### Environment variable names
 
@@ -121,7 +121,7 @@ Honest list of what this is not:
 - **Stripe is in test mode.** Pro is a demo of the billing flow, not a live product.
 - **Visitors must sign up** before they can try it. A public, no-login demo would need a stricter abuse plan.
 - **The rate limiter is in memory.** On serverless each instance has its own memory, so it slows casual abuse but is not a hard guarantee. The daily quota is enforced from the database.
-- **No automated tests.** Validation and the quota logic are the first things to cover.
+- **Test coverage is thin.** Unit tests (Vitest) cover lead validation, the Dubai-time daily quota and the rate limiter. The API routes, the Trigger.dev task, the Stripe webhook and the UI are not tested yet.
 - **Free fallback models** can be slow or rate limited, and result quality varies by model.
 - **Scoring criteria are fixed** for a fictional agency (see `workflows/lead-qualifier.md`). Next step: make them editable per user.
 - **Other ideas:** CSV bulk import, CRM export, push result updates instead of polling, an eval set to compare models.
