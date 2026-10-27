@@ -4,11 +4,13 @@ A full-stack app that takes a sales lead (name, company, role, budget, need, tim
 
 **Live demo:** https://lead-qualifier-taupe.vercel.app (create a free account to try it; use fictional data only)
 
-<!-- Add screenshots to docs/screenshots/ and uncomment:
-![Analyze screen](docs/screenshots/analyze.png)
-![History screen](docs/screenshots/history.png)
--->
-_Screenshots: [add screenshots to `docs/screenshots/`]_
+<p>
+  <img src="docs/screenshots/form.png" alt="Lead form with sample buttons, on a phone" width="240">
+  <img src="docs/screenshots/result.png" alt="Result card: not qualified, score 0, reasoning, next step, red flags" width="240">
+  <img src="docs/screenshots/history.png" alt="History page listing past analyses" width="240">
+</p>
+
+_Left to right: the lead form, a result for the spam sample, and the private history (phone width, dark mode)._
 
 ## The problem
 
