@@ -1,5 +1,7 @@
 # AI Lead Qualifier
 
+[![CI](https://github.com/MansoorAlmarar/lead-qualifier/actions/workflows/ci.yml/badge.svg)](https://github.com/MansoorAlmarar/lead-qualifier/actions/workflows/ci.yml)
+
 A full-stack app that takes a sales lead (name, company, role, budget, need, timeline, source, notes) and returns a structured verdict: qualified or not, a score out of 100, the reasoning, red flags and a suggested next step. Auth, saved history and a free/Pro billing tier are built in. It is a portfolio project: the point is a complete, deployed agent-style workflow, not a production CRM.
 
 **Live demo:** https://lead-qualifier-taupe.vercel.app (create a free account to try it; use fictional data only)
