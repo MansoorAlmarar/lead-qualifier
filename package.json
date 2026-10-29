@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx evals/cli.ts"
   },
   "repository": {
     "type": "git",
@@ -25,6 +27,8 @@
   "devDependencies": {
     "@trigger.dev/build": "4.7.3",
     "@types/node": "^26.6.5",
-    "typescript": "^5.9.3"
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   }
 }

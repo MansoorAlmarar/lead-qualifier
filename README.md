@@ -78,6 +78,7 @@ workflows/lead-qualifier.md   what the workflow should do
 tools/                        Trigger.dev task, prompt, schemas
 trigger.config.ts             Trigger.dev project config
 frontend/                     Next.js app (deployed to Vercel)
+evals/                        model comparison: labelled fictional leads, runner, scorer
 supabase/schema.sql           history table and row-level security policies
 supabase/billing.sql          subscriptions table (written by the Stripe webhook)
 docs/cv-bullets.md            CV and LinkedIn wording for this project
@@ -95,6 +96,7 @@ Requires Node 20+, a Trigger.dev account, an OpenRouter API key, a Supabase proj
 6. Install the Stripe CLI, run `stripe login`, then `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Put the signing secret it prints in `STRIPE_WEBHOOK_SECRET`.
 7. In `frontend/`: `npm run dev`, then open http://localhost:3000. Pay with Stripe's test card `4242 4242 4242 4242`.
 8. Checks, in `frontend/`: `npm run lint`, `npm test` and `npm run build`. Tests run offline with Supabase, Stripe and Trigger.dev mocked, so they need no env vars or keys.
+9. Checks, in the root: `npm run typecheck`, `npm test` and `npm run eval -- --mock`. None of them needs a key.
 
 ### Environment variable names
 
@@ -116,6 +118,71 @@ Names only. Values go in `frontend/.env.local`, Vercel, or the Trigger.dev dashb
 - **Backend:** `npx trigger.dev@latest deploy`. Set `OPENROUTER_API_KEY` in the Production environment.
 - **Frontend:** import the repo in Vercel, set the root directory to `frontend`, and add the variables above. In Supabase, set the Site URL and redirect URLs to the Vercel domain.
 
+## Model evaluation
+
+The eval set compares models on the same leads. Each lead goes through the same prompt and schema as the Trigger.dev task. The answers are then scored against labels written in advance.
+
+**What it measures**, per model, over 40 fictional leads:
+
+- **Qualified accuracy:** share of leads where `qualified` matches the expected label.
+- **Score-band hit rate:** share of leads where `score` falls inside the expected band.
+- **MAE:** mean distance between `score` and the middle of the expected band, valid replies only.
+- **Schema-valid rate:** share of replies that are JSON and pass `resultSchema` in `tools/schema.ts`.
+- **Median latency:** median time per call.
+
+An invalid reply counts as a miss for accuracy and band hits. Each model is called on its own, so the app's paid-then-free fallback is not tested.
+
+**Run it**
+
+Offline, with no keys and no cost. CI runs this mode:
+
+```bash
+npm run eval -- --mock
+```
+
+Live, through OpenRouter. This needs `OPENROUTER_API_KEY` and uses credit. CI never runs it:
+
+```bash
+OPENROUTER_API_KEY=your-key npm run eval
+```
+
+Models come from `EVAL_MODELS` (comma-separated ids), or from `evals/models.json` if that is not set. The default list is the models the app uses. Each run prints a Markdown table and writes it to `evals/results/`.
+
+Mock mode uses two offline stand-ins. `mock:keyword` is a rule-based baseline. `mock:flaky` is the same baseline with deliberate faults. Neither is an LLM. They check the scorer and the parser, and they let the eval run in CI without keys.
+
+**Sample output (mock mode, not an LLM result)**
+
+No live run is committed, because that needs a key. The tables below come from mock mode. They describe the mock models only and say nothing about any AI model. The full file is `evals/results/sample-mock.md`.
+
+| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | Median latency |
+|---|---|---|---|---|---|
+| mock:keyword | 92.5% | 50.0% | 9.3 | 100.0% | 0 ms |
+| mock:flaky | 50.0% | 27.5% | 10.1 | 57.5% | 0 ms |
+
+| Model | Strong | Medium | Weak | Spam |
+|---|---|---|---|---|
+| mock:keyword | 12/12 | 8/10 | 9/10 | 8/8 |
+| mock:flaky | 7/12 | 3/10 | 5/10 | 5/8 |
+
+**Add a lead**
+
+1. Add an object to `evals/dataset/leads.json`. It needs a unique `id`, a `category` (`strong`, `medium`, `weak` or `spam`), a `lead` that passes the app's lead schema, and an `expected` block.
+2. Set `expected.qualified`, and a `score_min` to `score_max` band. A qualified lead's band must start at 60 or higher. A lead that is not qualified must end at 59 or lower. This follows the rule in `tools/prompt.ts`.
+3. Update the counts in `CATEGORY_COUNTS` (`evals/dataset.ts`) to match. The tests fail if they differ.
+4. Use fictional names and companies only. Then run `npm test`.
+
+**Limits**
+
+- **Fake data.** The 40 leads are invented. Real inbound leads are messier, with typos, half-filled fields and mixed languages.
+- **Small set.** One lead is 2.5 points of accuracy. At 80% accuracy, the 95% interval on 40 leads is about ±12 points. A gap of ten points or less between two models is not meaningful.
+- **One labeller.** The labels are the author's judgement, based on the criteria in `tools/prompt.ts`. No second person has checked them.
+- **Fixed criteria.** The labels follow the four criteria for a fictional agency. A model that does well here has answered this prompt, not a different business's question.
+- **One run, one setting.** Temperature is 0.2 and each model runs once. Scores vary between runs, and free models vary by time of day.
+- **Latency is local.** It measures one machine's calls to OpenRouter, not the production path.
+- **Mock results are not model results.** Only a live run tells you how a model performs.
+
+The eval tests are separate from the frontend tests above. They cover the scorer, the parser, the dataset checks and the runner.
+
 ## Limitations and next steps
 
 Honest list of what this is not:
@@ -126,6 +193,6 @@ Honest list of what this is not:
 - **Test coverage is partial.** 47 Vitest tests cover lead validation, the Dubai-time daily quota, the rate limiter and the API routes (`/api/analyze`, `/api/stripe/webhook`, `/api/billing/*`) with Supabase, Stripe and Trigger.dev mocked. Not tested yet: `/api/runs/[id]`, the auth routes, the Trigger.dev task, the UI and any end-to-end flow.
 - **Free fallback models** can be slow or rate limited, and result quality varies by model.
 - **Scoring criteria are fixed** for a fictional agency (see `workflows/lead-qualifier.md`). Next step: make them editable per user.
-- **Other ideas:** CSV bulk import, CRM export, push result updates instead of polling, an eval set to compare models.
+- **Other ideas:** CSV bulk import, CRM export, push result updates instead of polling, live model results in the eval set.
 
 Lead data can be personal data. Please enter fictional leads only. Leads you submit are stored in Supabase under your account.

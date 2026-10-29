@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["tools/**/*.ts", "trigger.config.ts"]
+  "include": ["tools/**/*.ts", "evals/**/*.ts", "trigger.config.ts", "vitest.config.mts"]
 }
