@@ -1,0 +1,8 @@
+{
+  "models": [
+    "openai/gpt-4o-mini",
+    "minimax/minimax-m3.1-flash:free",
+    "poolside/laguna-s-2.1:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free"
+  ]
+}
