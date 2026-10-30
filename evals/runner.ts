@@ -49,10 +49,11 @@ export async function runModel(
       const outcome = parseModelOutput(raw);
       prediction = outcome.ok
         ? { ok: true, qualified: outcome.result.qualified, score: outcome.result.score, latencyMs }
-        : { ok: false, reason: outcome.reason, latencyMs };
+        : { ok: false, failure: "schema", reason: outcome.reason, latencyMs };
     } catch (error) {
       prediction = {
         ok: false,
+        failure: "network",
         reason: error instanceof Error ? error.message : "unknown error",
         latencyMs: performance.now() - started,
       };

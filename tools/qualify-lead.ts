@@ -1,6 +1,7 @@
 import { logger, task } from "@trigger.dev/sdk";
 import { leadSchema, resultSchema, type Lead, type QualificationResult } from "./schema";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
+import { stripCodeFence } from "./parse-reply";
 
 // Swap models here. Any OpenRouter model id works.
 // The paid model is tried first. If OpenRouter refuses it (out of credit, rate limited or down),
@@ -35,32 +36,32 @@ async function callOpenRouter(apiKey: string, models: string[], lead: Lead): Pro
   });
 }
 
+// Exported so the eval parity test can run the task's own code with OpenRouter stubbed.
+export async function qualify(payload: unknown, apiKey: string | undefined): Promise<QualificationResult> {
+  const lead = leadSchema.parse(payload);
+
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+
+  let res = await callOpenRouter(apiKey, PAID_MODELS, lead);
+  if (!res.ok && shouldFallBack(res.status)) {
+    logger.warn(`Paid model failed with ${res.status}, falling back to free models`);
+    res = await callOpenRouter(apiKey, FREE_MODELS, lead);
+  }
+
+  if (!res.ok) {
+    throw new Error(`OpenRouter error ${res.status}: ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("OpenRouter returned no content");
+
+  return resultSchema.parse(JSON.parse(stripCodeFence(content)));
+}
+
 export const qualifyLead = task({
   id: "qualify-lead",
-  run: async (payload: unknown): Promise<QualificationResult> => {
-    const lead = leadSchema.parse(payload);
-
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
-
-    let res = await callOpenRouter(apiKey, PAID_MODELS, lead);
-    if (!res.ok && shouldFallBack(res.status)) {
-      logger.warn(`Paid model failed with ${res.status}, falling back to free models`);
-      res = await callOpenRouter(apiKey, FREE_MODELS, lead);
-    }
-
-    if (!res.ok) {
-      throw new Error(`OpenRouter error ${res.status}: ${await res.text()}`);
-    }
-
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error("OpenRouter returned no content");
-
-    // Some models wrap JSON in a code fence even in JSON mode.
-    const json = content.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-    return resultSchema.parse(JSON.parse(json));
-  },
+  run: (payload: unknown): Promise<QualificationResult> => qualify(payload, process.env.OPENROUTER_API_KEY),
 });

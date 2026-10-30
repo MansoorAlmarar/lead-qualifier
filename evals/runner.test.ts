@@ -49,6 +49,16 @@ describe("runModel", () => {
     expect(cases[2].prediction.ok).toBe(true);
   });
 
+  it("tells a failed call (network) apart from a bad reply (schema)", async () => {
+    const completion = async ({ leadId }: { leadId: string }) => {
+      if (leadId === leads[0].id) throw new Error("OpenRouter error 429");
+      return "not json";
+    };
+    const cases = await runModel("m", leads.slice(0, 2), completion);
+    expect(cases[0].prediction).toMatchObject({ ok: false, failure: "network", reason: "OpenRouter error 429" });
+    expect(cases[1].prediction).toMatchObject({ ok: false, failure: "schema", reason: "not JSON" });
+  });
+
   it("calls onLead once per lead", async () => {
     let calls = 0;
     await runModel("m", leads.slice(0, 5), async () => valid, () => (calls += 1));

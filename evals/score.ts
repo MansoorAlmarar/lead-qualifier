@@ -1,8 +1,9 @@
 import type { Category, Expected } from "./dataset";
 
+/** "network": the call failed (HTTP error, timeout, no reply). "schema": a reply came back but was not valid. */
 export type Prediction =
   | { ok: true; qualified: boolean; score: number; latencyMs: number }
-  | { ok: false; reason: string; latencyMs: number };
+  | { ok: false; failure: "network" | "schema"; reason: string; latencyMs: number };
 
 export type Case = { category: Category; expected: Expected; prediction: Prediction };
 
@@ -15,6 +16,8 @@ export type ModelScore = {
   /** Mean absolute error against the middle of the expected band, over valid replies only. */
   maeScore: number | null;
   schemaValidRate: number;
+  networkErrors: number;
+  schemaFailures: number;
   medianLatencyMs: number | null;
   byCategory: Record<Category, { correct: number; total: number }>;
 };
@@ -38,11 +41,15 @@ export function scoreModel(model: string, cases: Case[]): ModelScore {
   let correct = 0;
   let bandHits = 0;
   let valid = 0;
+  let networkErrors = 0;
   let absoluteError = 0;
 
   for (const { category, expected, prediction } of cases) {
     byCategory[category].total += 1;
-    if (!prediction.ok) continue;
+    if (!prediction.ok) {
+      if (prediction.failure === "network") networkErrors += 1;
+      continue;
+    }
 
     valid += 1;
     if (prediction.qualified === expected.qualified) {
@@ -64,6 +71,8 @@ export function scoreModel(model: string, cases: Case[]): ModelScore {
     bandHitRate: total === 0 ? 0 : bandHits / total,
     maeScore: valid === 0 ? null : absoluteError / valid,
     schemaValidRate: total === 0 ? 0 : valid / total,
+    networkErrors,
+    schemaFailures: total - valid - networkErrors,
     medianLatencyMs: median(cases.map((c) => c.prediction.latencyMs)),
     byCategory,
   };
@@ -89,11 +98,11 @@ export function renderMarkdown(report: {
     `- Generated: ${generatedAt}`,
     `- Leads: ${datasetSize} fictional leads (\`evals/dataset/leads.json\`)`,
     "",
-    "| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | Median latency |",
-    "|---|---|---|---|---|---|",
+    "| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | HTTP/network errors | Schema failures | Median latency |",
+    "|---|---|---|---|---|---|---|---|",
     ...scores.map(
       (s) =>
-        `| ${s.model} | ${pct(s.qualifiedAccuracy)} | ${pct(s.bandHitRate)} | ${s.maeScore === null ? "n/a" : s.maeScore.toFixed(1)} | ${pct(s.schemaValidRate)} | ${ms(s.medianLatencyMs)} |`,
+        `| ${s.model} | ${pct(s.qualifiedAccuracy)} | ${pct(s.bandHitRate)} | ${s.maeScore === null ? "n/a" : s.maeScore.toFixed(1)} | ${pct(s.schemaValidRate)} | ${s.networkErrors} | ${s.schemaFailures} | ${ms(s.medianLatencyMs)} |`,
     ),
     "",
     "### Qualified accuracy by category",
@@ -107,7 +116,8 @@ export function renderMarkdown(report: {
     "",
     "Notes:",
     "",
-    "- Accuracy and band hit rate count an invalid reply as a miss.",
+    "- Accuracy and band hit rate count a failed call and an invalid reply as misses.",
+    "- HTTP/network errors: the call failed (for example a 429, a 5xx or a timeout). Schema failures: a reply came back but was not valid JSON or broke the schema.",
     "- MAE uses valid replies only. It compares the score with the middle of the expected band.",
     "- Median latency covers every call. Mock latencies only reflect in-memory work, so they are not comparable to live numbers.",
     "- Each model is called on its own. The app's paid-then-free fallback chain is not exercised.",

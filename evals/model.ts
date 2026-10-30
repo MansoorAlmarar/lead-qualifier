@@ -1,5 +1,6 @@
 import { SYSTEM_PROMPT, buildUserPrompt } from "../tools/prompt";
 import { resultSchema, type Lead, type QualificationResult } from "../tools/schema";
+import { stripCodeFence } from "../tools/parse-reply";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 export const REQUEST_TIMEOUT_MS = 60_000;
@@ -43,8 +44,7 @@ export type ParseOutcome = { ok: true; result: QualificationResult } | { ok: fal
 
 /** Same clean-up and validation as tools/qualify-lead.ts, but returns a reason instead of throwing. */
 export function parseModelOutput(content: string): ParseOutcome {
-  // Some models wrap JSON in a code fence even in JSON mode.
-  const json = content.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+  const json = stripCodeFence(content);
 
   let parsed: unknown;
   try {

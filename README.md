@@ -154,10 +154,10 @@ Mock mode uses two offline stand-ins. `mock:keyword` is a rule-based baseline. `
 
 No live run is committed, because that needs a key. The tables below come from mock mode. They describe the mock models only and say nothing about any AI model. The full file is `evals/results/sample-mock.md`.
 
-| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | Median latency |
-|---|---|---|---|---|---|
-| mock:keyword | 92.5% | 50.0% | 9.3 | 100.0% | 0 ms |
-| mock:flaky | 50.0% | 27.5% | 10.1 | 57.5% | 0 ms |
+| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | HTTP/network errors | Schema failures | Median latency |
+|---|---|---|---|---|---|---|---|
+| mock:keyword | 92.5% | 50.0% | 9.3 | 100.0% | 0 | 0 | 0 ms |
+| mock:flaky | 50.0% | 27.5% | 10.1 | 57.5% | 0 | 17 | 0 ms |
 
 | Model | Strong | Medium | Weak | Spam |
 |---|---|---|---|---|
@@ -180,6 +180,7 @@ No live run is committed, because that needs a key. The tables below come from m
 - **One run, one setting.** Temperature is 0.2 and each model runs once. Scores vary between runs, and free models vary by time of day.
 - **Latency is local.** It measures one machine's calls to OpenRouter, not the production path.
 - **Mock results are not model results.** Only a live run tells you how a model performs.
+- **One default model id is not on OpenRouter.** `minimax/minimax-m3.1-flash:free` is not in OpenRouter's public model list. It is also in the app's free fallback list. See `REVIEW.md`.
 
 The eval tests are separate from the frontend tests above. They cover the scorer, the parser, the dataset checks and the runner.
 
