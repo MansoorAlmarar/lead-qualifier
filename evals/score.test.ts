@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { median, renderMarkdown, scoreModel, type Case } from "./score";
 
 const good = (qualified: boolean, score: number, latencyMs = 100) => ({ ok: true as const, qualified, score, latencyMs });
-const bad = (latencyMs = 100) => ({ ok: false as const, reason: "not JSON", latencyMs });
+const bad = (latencyMs = 100) => ({ ok: false as const, failure: "schema" as const, reason: "not JSON", latencyMs });
+const down = (latencyMs = 100) => ({ ok: false as const, failure: "network" as const, reason: "OpenRouter error 503", latencyMs });
 
 const strong: Case = { category: "strong", expected: { qualified: true, score_min: 80, score_max: 90 }, prediction: good(true, 85) };
 
@@ -28,6 +29,14 @@ describe("scoreModel", () => {
     expect(score.qualifiedAccuracy).toBe(0.5);
     expect(score.bandHitRate).toBe(0.5);
     expect(score.schemaValidRate).toBe(0.5);
+  });
+
+  it("counts network errors and schema failures separately", () => {
+    const score = scoreModel("m", [strong, { ...strong, prediction: bad() }, { ...strong, prediction: down() }, { ...strong, prediction: down() }]);
+    expect(score.networkErrors).toBe(2);
+    expect(score.schemaFailures).toBe(1);
+    expect(score.valid).toBe(1);
+    expect(score.schemaValidRate).toBe(0.25);
   });
 
   it("leaves invalid replies out of the MAE", () => {
@@ -82,9 +91,9 @@ describe("renderMarkdown", () => {
   const markdown = renderMarkdown({ mode: "mock", generatedAt: "2026-01-01T00:00:00.000Z", datasetSize: 40, scores });
 
   it("writes one row per model in the summary table", () => {
-    expect(markdown).toContain("| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | Median latency |");
-    expect(markdown).toContain("| mock:keyword | 100.0% | 100.0% | 0.0 | 100.0% | 100 ms |");
-    expect(markdown).toContain("| mock:flaky | 0.0% | 0.0% | n/a | 0.0% | 100 ms |");
+    expect(markdown).toContain("| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | HTTP/network errors | Schema failures | Median latency |");
+    expect(markdown).toContain("| mock:keyword | 100.0% | 100.0% | 0.0 | 100.0% | 0 | 0 | 100 ms |");
+    expect(markdown).toContain("| mock:flaky | 0.0% | 0.0% | n/a | 0.0% | 0 | 1 | 100 ms |");
   });
 
   it("labels mock results so they cannot be read as model scores", () => {

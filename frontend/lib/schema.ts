@@ -14,13 +14,16 @@ export const leadSchema = z.object({
 
 export type Lead = z.infer<typeof leadSchema>;
 
-export type QualificationResult = {
-  qualified: boolean;
-  score: number;
-  reasoning: string;
-  next_step: string;
-  red_flags: string[];
-};
+// Mirrors tools/schema.ts. Keep the two in sync.
+export const resultSchema = z.object({
+  qualified: z.boolean(),
+  score: z.number().min(0).max(100),
+  reasoning: z.string(),
+  next_step: z.string(),
+  red_flags: z.array(z.string()),
+});
+
+export type QualificationResult = z.infer<typeof resultSchema>;
 
 export type RunState =
   | { status: "pending" }

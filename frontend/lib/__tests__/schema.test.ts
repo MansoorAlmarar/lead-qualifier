@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leadSchema } from "../schema";
+import { leadSchema, resultSchema } from "../schema";
 
 const valid = { name: "Sara Khan", need: "Automate invoice processing." };
 
@@ -42,5 +42,24 @@ describe("leadSchema", () => {
   it("rejects non-string values and non-objects", () => {
     expect(leadSchema.safeParse({ ...valid, budget: 5000 }).success).toBe(false);
     expect(leadSchema.safeParse(null).success).toBe(false);
+  });
+});
+
+describe("resultSchema", () => {
+  const valid = { qualified: true, score: 80, reasoning: "Clear need.", next_step: "Book a call.", red_flags: [] };
+
+  it("accepts a valid result", () => {
+    expect(resultSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects a score outside 0 to 100", () => {
+    expect(resultSchema.safeParse({ ...valid, score: 150 }).success).toBe(false);
+    expect(resultSchema.safeParse({ ...valid, score: -1 }).success).toBe(false);
+  });
+
+  it("rejects a missing field", () => {
+    const missing: Partial<typeof valid> = { ...valid };
+    delete missing.red_flags;
+    expect(resultSchema.safeParse(missing).success).toBe(false);
   });
 });

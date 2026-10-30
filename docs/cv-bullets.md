@@ -20,4 +20,4 @@ Organised with the WAT framework (workflows, agent, tools) and built with Claude
 ## Interview notes
 
 - Be upfront that Stripe is in test mode and the in-memory rate limiter is best-effort.
-- No automated tests yet. Say what you would test first.
+- Tests: 47 frontend Vitest tests (API routes, billing, rate limit, schema) plus the eval tests at the root. Not tested yet: the auth routes, the Trigger.dev task end to end, the UI and any full flow. Say that first, then what you would test next.

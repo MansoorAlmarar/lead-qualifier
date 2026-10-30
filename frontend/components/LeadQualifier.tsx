@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Usage } from "@/lib/billing";
 import type { Lead, QualificationResult, RunState } from "@/lib/schema";
 import { SAMPLES } from "@/lib/samples";
+import { readJson } from "@/lib/api";
 import { PlanBar } from "./PlanBar";
 
 type Phase =
@@ -105,7 +106,7 @@ export function LeadQualifier() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await readJson<{ runId: string; error: string }>(res);
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
 
       const started = Date.now();
@@ -113,7 +114,7 @@ export function LeadQualifier() {
         await new Promise((r) => setTimeout(r, POLL_MS));
         if (token !== runToken.current) return; // a newer run replaced this one
         const poll = await fetch(`/api/runs/${data.runId}`);
-        const state = (await poll.json()) as RunState & { error?: string };
+        const state = (await readJson<RunState & { error: string }>(poll)) as RunState & { error?: string };
         if (!poll.ok) throw new Error(state.error ?? "Could not read the result.");
         if (state.status === "done") {
           setPhase({ kind: "done", result: state.result });
