@@ -36,10 +36,14 @@ export async function POST(request: Request) {
       .eq("stripe_customer_id", customerId)
       .select("user_id");
 
-    if (error || !data?.length) {
-      console.error("webhook update failed:", error?.code ?? "no matching customer", event.type);
+    if (error) {
+      console.error("webhook update failed:", error.code, event.type);
       // 500 makes Stripe retry later.
       return Response.json({ error: "Could not update subscription." }, { status: 500 });
+    }
+    if (!data?.length) {
+      // A subscription made outside the app. Retrying cannot help, so acknowledge it.
+      console.warn("webhook: no matching customer, ignored", event.type);
     }
   }
 

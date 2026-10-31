@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getUsage: vi.fn(),
   userMaybeSingle: vi.fn(),
   adminMaybeSingle: vi.fn(),
-  adminInsert: vi.fn(),
+  adminUpsert: vi.fn(),
   customersCreate: vi.fn(),
   sessionsCreate: vi.fn(),
   portalCreate: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle: mocks.adminMaybeSingle }) }),
-      insert: mocks.adminInsert,
+      upsert: () => ({ select: () => ({ maybeSingle: mocks.adminUpsert }) }),
     }),
   }),
 }));
@@ -80,13 +80,12 @@ describe("POST /api/billing/checkout", () => {
   it("happy path: creates a customer, saves it, and returns the checkout url", async () => {
     mocks.adminMaybeSingle.mockResolvedValue({ data: null });
     mocks.customersCreate.mockResolvedValue({ id: "cus_new" });
-    mocks.adminInsert.mockResolvedValue({ error: null });
+    mocks.adminUpsert.mockResolvedValue({ data: { stripe_customer_id: "cus_new" }, error: null });
     mocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.example/session" });
 
     const res = await checkoutPOST(req("/api/billing/checkout"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: "https://checkout.example/session" });
-    expect(mocks.adminInsert).toHaveBeenCalledWith({ user_id: "user-1", stripe_customer_id: "cus_new" });
     expect(mocks.sessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
@@ -95,6 +94,26 @@ describe("POST /api/billing/checkout", () => {
         success_url: "http://localhost/?upgraded=1",
       }),
     );
+  });
+
+  it("uses the customer that won when two checkouts race (upsert ignored ours)", async () => {
+    mocks.adminMaybeSingle
+      .mockResolvedValueOnce({ data: null }) // first lookup: no row yet
+      .mockResolvedValueOnce({ data: { stripe_customer_id: "cus_winner" } }); // read-back after the conflict
+    mocks.customersCreate.mockResolvedValue({ id: "cus_loser" });
+    mocks.adminUpsert.mockResolvedValue({ data: null, error: null });
+    mocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.example/session" });
+    const res = await checkoutPOST(req("/api/billing/checkout"));
+    expect(res.status).toBe(200);
+    expect(mocks.sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_winner" }));
+  });
+
+  it("returns 502 when saving the customer fails", async () => {
+    mocks.adminMaybeSingle.mockResolvedValue({ data: null });
+    mocks.customersCreate.mockResolvedValue({ id: "cus_new" });
+    mocks.adminUpsert.mockResolvedValue({ data: null, error: { code: "XX000" } });
+    expect((await checkoutPOST(req("/api/billing/checkout"))).status).toBe(502);
+    expect(mocks.sessionsCreate).not.toHaveBeenCalled();
   });
 
   it("reuses the saved customer for a returning (canceled) user", async () => {

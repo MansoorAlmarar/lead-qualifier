@@ -12,6 +12,7 @@ const replies: Record<string, string> = {
   fenced: "```json\n" + JSON.stringify(verdict) + "\n```",
   notJson: "Sorry, I cannot help.",
   scoreAbove100: JSON.stringify({ ...verdict, score: 150 }),
+  qualifiedLowScore: JSON.stringify({ ...verdict, score: 30 }),
   missingField: JSON.stringify({ qualified: true, score: 80 }),
 };
 

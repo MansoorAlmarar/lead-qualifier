@@ -11,13 +11,20 @@ export const leadSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
-export const resultSchema = z.object({
-  qualified: z.boolean(),
-  score: z.number().min(0).max(100),
-  reasoning: z.string(),
-  next_step: z.string(),
-  red_flags: z.array(z.string()),
-});
+// The prompt says "qualified only when score is 60 or higher". Enforce it here too.
+export const QUALIFY_THRESHOLD = 60;
+
+export const resultSchema = z
+  .object({
+    qualified: z.boolean(),
+    score: z.number().min(0).max(100),
+    reasoning: z.string(),
+    next_step: z.string(),
+    red_flags: z.array(z.string()),
+  })
+  // A reply with qualified true and a low score is fixed to qualified false, not rejected.
+  // Fixing keeps the run useful. The score is the model's real signal, so it wins.
+  .transform((r) => (r.qualified && r.score < QUALIFY_THRESHOLD ? { ...r, qualified: false } : r));
 
 export type Lead = z.infer<typeof leadSchema>;
 export type QualificationResult = z.infer<typeof resultSchema>;
