@@ -63,3 +63,11 @@ describe("resultSchema", () => {
     expect(resultSchema.safeParse(missing).success).toBe(false);
   });
 });
+
+describe("resultSchema qualify threshold", () => {
+  const base = { reasoning: "Because.", next_step: "Call.", red_flags: [] };
+  it("turns qualified true with a score below 60 into qualified false", () => {
+    expect(resultSchema.parse({ ...base, qualified: true, score: 30 }).qualified).toBe(false);
+    expect(resultSchema.parse({ ...base, qualified: true, score: 60 }).qualified).toBe(true);
+  });
+});

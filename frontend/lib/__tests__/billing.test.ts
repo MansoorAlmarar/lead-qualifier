@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FREE_DAILY_LIMIT, getUsage, startOfDubaiDay } from "../billing";
+import { FREE_DAILY_LIMIT, PENDING_TTL_MS, getUsage, startOfDubaiDay } from "../billing";
 
 describe("startOfDubaiDay", () => {
   it("returns Dubai midnight, which is 20:00 UTC the day before", () => {
@@ -16,9 +16,11 @@ describe("startOfDubaiDay", () => {
   });
 });
 
+afterEach(() => vi.useRealTimers());
+
 // Minimal stand-in for the two queries getUsage runs.
 function fakeSupabase(subscriptionStatus: string | null, runCount: number | null) {
-  const calls = { neq: [] as unknown[][] };
+  const calls = { or: [] as unknown[][] };
   const client = {
     from(table: string) {
       if (table === "subscriptions") {
@@ -30,8 +32,8 @@ function fakeSupabase(subscriptionStatus: string | null, runCount: number | null
       }
       const query = {
         gte: () => query,
-        neq: (...args: unknown[]) => {
-          calls.neq.push(args);
+        or: (...args: unknown[]) => {
+          calls.or.push(args);
           return Promise.resolve({ count: runCount });
         },
       };
@@ -61,10 +63,14 @@ describe("getUsage", () => {
     }
   });
 
-  it("excludes failed runs from the count", async () => {
+  it("counts done runs and recent pending runs, but not failed or stale pending runs", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-27T10:00:00Z"));
     const { client, calls } = fakeSupabase(null, 0);
     await getUsage(client);
-    expect(calls.neq).toEqual([["status", "failed"]]);
+    const cutoff = new Date(Date.parse("2026-10-27T10:00:00Z") - PENDING_TTL_MS).toISOString();
+    expect(PENDING_TTL_MS).toBe(10 * 60 * 1000);
+    expect(calls.or).toEqual([[`status.eq.done,and(status.eq.pending,created_at.gte.${cutoff})`]]);
   });
 
   it("treats a null count as zero", async () => {

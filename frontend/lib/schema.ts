@@ -15,13 +15,17 @@ export const leadSchema = z.object({
 export type Lead = z.infer<typeof leadSchema>;
 
 // Mirrors tools/schema.ts. Keep the two in sync.
-export const resultSchema = z.object({
-  qualified: z.boolean(),
-  score: z.number().min(0).max(100),
-  reasoning: z.string(),
-  next_step: z.string(),
-  red_flags: z.array(z.string()),
-});
+export const QUALIFY_THRESHOLD = 60;
+
+export const resultSchema = z
+  .object({
+    qualified: z.boolean(),
+    score: z.number().min(0).max(100),
+    reasoning: z.string(),
+    next_step: z.string(),
+    red_flags: z.array(z.string()),
+  })
+  .transform((r) => (r.qualified && r.score < QUALIFY_THRESHOLD ? { ...r, qualified: false } : r));
 
 export type QualificationResult = z.infer<typeof resultSchema>;
 
