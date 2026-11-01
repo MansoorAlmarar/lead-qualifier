@@ -11,6 +11,9 @@ export function startOfDubaiDay(now = Date.now()): Date {
   return new Date(local - (local % DAY_MS) - DUBAI_OFFSET_MS);
 }
 
+// A run still pending after this long stops counting against the free limit (the user likely left).
+export const PENDING_TTL_MS = 10 * 60 * 1000;
+
 export type Usage = { plan: "free" | "pro"; used: number; limit: number | null };
 
 // Works with the user's own client: row-level security limits both queries to their rows.
@@ -21,12 +24,14 @@ export async function getUsage(supabase: SupabaseClient): Promise<Usage> {
     .maybeSingle();
   const pro = sub?.status === "active" || sub?.status === "trialing";
 
-  // Failed runs do not count against the free limit.
+  // Done runs count. Pending runs count for 10 minutes. Failed runs never count.
+  // Keep in step with supabase/claim-analysis.sql.
+  const staleBefore = new Date(Date.now() - PENDING_TTL_MS).toISOString();
   const { count } = await supabase
     .from("lead_history")
     .select("id", { count: "exact", head: true })
     .gte("created_at", startOfDubaiDay().toISOString())
-    .neq("status", "failed");
+    .or(`status.eq.done,and(status.eq.pending,created_at.gte.${staleBefore})`);
 
   return {
     plan: pro ? "pro" : "free",

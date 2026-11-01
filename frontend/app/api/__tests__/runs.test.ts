@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   maybeSingle: vi.fn(),
   updateEq: vi.fn(),
   update: vi.fn(),
+  userUpdate: vi.fn(),
   retrieve: vi.fn(),
 }));
 
@@ -13,9 +14,12 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: { getUser: mocks.getUser },
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle: mocks.maybeSingle }) }),
-      update: mocks.update,
+      update: mocks.userUpdate,
     }),
   }),
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({ from: () => ({ update: mocks.update }) }),
 }));
 vi.mock("@trigger.dev/sdk", () => ({ runs: { retrieve: mocks.retrieve } }));
 
@@ -48,6 +52,13 @@ describe("GET /api/runs/[id]", () => {
     const res = await get();
     expect(await res.json()).toEqual({ status: "failed" });
     expect(mocks.update).toHaveBeenCalledWith({ status: "failed" });
+  });
+
+  it("writes the result with the admin client, never the user's own client", async () => {
+    mocks.retrieve.mockResolvedValue({ status: "COMPLETED", output: valid });
+    await get();
+    expect(mocks.update).toHaveBeenCalled();
+    expect(mocks.userUpdate).not.toHaveBeenCalled();
   });
 
   it("keeps a run pending while it is still running", async () => {

@@ -27,11 +27,24 @@ export async function POST(request: Request) {
         email: user.email,
         metadata: { supabase_user_id: user.id },
       });
-      customerId = customer.id;
-      const { error } = await admin
+      // Upsert, not insert: a second checkout at the same moment must not fail.
+      // The first saved customer wins, so read it back and use that one.
+      const { data: saved, error } = await admin
         .from("subscriptions")
-        .insert({ user_id: user.id, stripe_customer_id: customerId });
-      if (error) throw new Error(`subscription row insert failed: ${error.code}`);
+        .upsert({ user_id: user.id, stripe_customer_id: customer.id }, { onConflict: "user_id", ignoreDuplicates: true })
+        .select("stripe_customer_id")
+        .maybeSingle();
+      if (error) throw new Error(`subscription row upsert failed: ${error.code}`);
+      customerId = saved?.stripe_customer_id;
+      if (!customerId) {
+        const { data: winner } = await admin
+          .from("subscriptions")
+          .select("stripe_customer_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        customerId = winner?.stripe_customer_id;
+      }
+      if (!customerId) throw new Error("subscription row missing after upsert");
     }
 
     const origin = new URL(request.url).origin;

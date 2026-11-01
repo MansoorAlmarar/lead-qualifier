@@ -108,10 +108,12 @@ describe("POST /api/stripe/webhook", () => {
     expect(mocks.eq).toHaveBeenCalledWith("stripe_customer_id", "cus_2");
   });
 
-  it("returns 500 so Stripe retries when no customer row matches", async () => {
+  it("returns 200 and logs a warning when no customer row matches", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mocks.select.mockResolvedValue({ data: [], error: null });
     const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created")));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no matching customer"), "customer.subscription.created");
   });
 
   it("returns 500 when the database update errors", async () => {

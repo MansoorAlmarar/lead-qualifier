@@ -1,6 +1,7 @@
 import { runs } from "@trigger.dev/sdk";
 import type { NextRequest } from "next/server";
 import { resultSchema, type RunState } from "@/lib/schema";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const FAILED = new Set([
@@ -42,15 +43,18 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/runs/[id]">
 
   try {
     const run = await runs.retrieve(id);
+    // Writes use the admin client, so a user cannot change the stored result of their own run.
+    // The row was already found with the user's own client above, so it is theirs.
+    const admin = createAdminClient();
     let state: RunState;
     // Check the output before saving it. A malformed result is a failed run.
     const output = run.status === "COMPLETED" ? resultSchema.safeParse(run.output) : null;
     if (output?.success) {
       state = { status: "done", result: output.data };
-      await supabase.from("lead_history").update({ status: "done", result: output.data }).eq("run_id", id);
+      await admin.from("lead_history").update({ status: "done", result: output.data }).eq("run_id", id);
     } else if (output || FAILED.has(run.status)) {
       state = { status: "failed" };
-      await supabase.from("lead_history").update({ status: "failed" }).eq("run_id", id);
+      await admin.from("lead_history").update({ status: "failed" }).eq("run_id", id);
     } else {
       state = { status: "pending" };
     }

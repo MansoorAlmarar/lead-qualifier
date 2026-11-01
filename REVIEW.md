@@ -9,7 +9,7 @@ Status: **Fixed** (changed in this PR, with a test) or **Left** (needs a decisio
 
 ---
 
-## Fixed in this PR
+## Fixed
 
 | # | Sev | Where | Finding | Fix and test |
 |---|---|---|---|---|
@@ -20,27 +20,27 @@ Status: **Fixed** (changed in this PR, with a test) or **Left** (needs a decisio
 | F5 | Low | `frontend/lib/schema.ts` | The frontend's result type was hand-written, so it could drift from the task's schema. | Replaced by a zod `resultSchema` that mirrors `tools/schema.ts`, with the type inferred from it. Test: `frontend/lib/__tests__/schema.test.ts`. |
 | F6 | Low | `docs/cv-bullets.md` | The interview notes said "No automated tests yet". That is stale. | Now lists what is and is not tested, matching the README. |
 | F7 | Info | `tools/.gitkeep` | Dead file. The folder has real files. | Removed. |
+| L2 | Medium | `frontend/app/api/analyze/route.ts:18-27` | The free daily limit is a read followed later by an insert. Two requests sent at once can both pass, so a user can go over 2 per day. | Atomic: `supabase/claim-analysis.sql` (`claim_analysis`) checks the count and inserts in one step under a per-user lock. The route calls it. Needs the migration applied by hand. Tests: `analyze.test.ts`. |
+| L3 | Medium | `frontend/lib/billing.ts:24-29` | A run that stays `pending` (for example, the user closed the tab before polling finished) still counts against the free limit. Nothing marks it expired. | Pending runs older than 10 minutes no longer count (`PENDING_TTL_MS` in `frontend/lib/billing.ts`, same rule in the SQL function). Test: `billing.test.ts`. |
+| L4 | Medium | `tools/schema.ts:14-20`, `tools/prompt.ts:15` | The rule "qualified only when score is 60 or higher" is only in the prompt. The code accepts `qualified: true` with a score of 30. | Enforced in `resultSchema` (tools and frontend): `qualified: true` with a score under 60 becomes `qualified: false`. Chose fix over reject so the run stays useful. Eval band checks need no change, since the eval parser uses the same schema. Tests: `tools/schema.test.ts`, `evals/parity.test.ts`. |
+| L5 | Medium | `frontend/app/api/stripe/webhook/route.ts:39-43` | If no row matches the Stripe customer, the route returns 500, so Stripe retries for days. A subscription created outside the app would retry for a long time. | No matching customer returns 200 and logs a warning. Database errors still return 500. Test: `stripe-webhook.test.ts`. |
+| L6 | Low | `frontend/app/api/billing/checkout/route.ts:23-35` | Two checkouts at the same moment can each create a Stripe customer. The second database insert fails (`user_id` is the primary key), which leaves an unused customer. | Checkout upserts (ignore duplicates), then reads back the stored customer id, so a race cannot split the customer. Test: `billing.test.ts`. |
+| L8 | Low | `frontend/app/api/analyze/route.ts:39-43` | The task is started before the history row is written. If the insert fails, the LLM still runs and the user sees an error. | The history row is written (inside `claim_analysis`) before the task starts. If starting the task fails, the row is marked `failed` and does not count. Test: `analyze.test.ts`. |
+| L9 | Low | `frontend/app/api/analyze/route.ts:29` | The whole request body is read before the length limits apply. Field lengths are capped only after parsing. | `readLimitedText` (`frontend/lib/body.ts`) caps the body at 16 KB, read as a stream. Returns 413 above that. Tests: `body.test.ts`, `analyze.test.ts`. |
+| L11 | Low | `frontend/app/api/runs/[id]/route.ts:50,53` | The run route writes status and result with the user's own client. RLS allows it, so a user could change the stored result of their own run. The impact is their own data only. | The run route writes status and result with the admin client. The "update own history" policy still exists. Dropping it is optional, after this is deployed. Test: `runs.test.ts`. |
+| L12 | Low | `tools/qualify-lead.ts:52` | On an OpenRouter error, the response body is put into the thrown error, which Trigger logs. Bodies are unlikely to echo the lead, but this is a leak path. | The task throws `OpenRouter error <status>` only, no body. Test: `tools/qualify-lead.test.ts`. |
+| L14 | Info | `package.json:5` | `"main": "index.js"` points at a file that does not exist. Harmless. | Removed the bad `main` from `package.json`. |
 
 ---
 
-## Left: needs a decision (not changed here)
+## Left: needs a decision (not changed)
 
 | # | Sev | Where | Finding | Why not changed |
 |---|---|---|---|---|
-| L1 | Medium | `tools/qualify-lead.ts:11` (also `evals/models.json`) | `minimax/minimax-m3.1-flash:free` is **not on OpenRouter's public model list** (checked against 456 listed ids on 2026-10-29). That slot of the free fallback can never succeed. The other three ids exist: `openai/gpt-4o-mini`, `poolside/laguna-s-2.1:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`. | Choosing a replacement is a model choice, and the eval should decide it. Suggested: run `npm run eval` with a key, then pick the best free model that is on the list. |
-| L2 | Medium | `frontend/app/api/analyze/route.ts:18-27` | The free daily limit is a read followed later by an insert. Two requests sent at once can both pass, so a user can go over 2 per day. | A real fix needs one atomic step in the database (a function or a locked count). That is a schema change. |
-| L3 | Medium | `frontend/lib/billing.ts:24-29` | A run that stays `pending` (for example, the user closed the tab before polling finished) still counts against the free limit. Nothing marks it expired. | Needs a product rule for how long a run may stay pending. |
-| L4 | Medium | `tools/schema.ts:14-20`, `tools/prompt.ts:15` | The rule "qualified only when score is 60 or higher" is only in the prompt. The code accepts `qualified: true` with a score of 30. | Enforcing it changes verdicts users see. Decide the policy first. The eval's band checks would show how often models break the rule. |
-| L5 | Medium | `frontend/app/api/stripe/webhook/route.ts:39-43` | If no row matches the Stripe customer, the route returns 500, so Stripe retries for days. A subscription created outside the app would retry for a long time. | Returning 200 and logging is a policy choice about Stripe retries. Test mode only today. |
-| L6 | Low | `frontend/app/api/billing/checkout/route.ts:23-35` | Two checkouts at the same moment can each create a Stripe customer. The second database insert fails (`user_id` is the primary key), which leaves an unused customer. | Needs an upsert or an on-conflict rule. Low impact in test mode. |
-| L7 | Low | `trigger.config.ts:8-14` | `maxAttempts: 2` makes Trigger rerun the task after a failure. Each rerun is another paid OpenRouter call. | Cost trade-off. Decide whether a retry is worth the cost. |
-| L8 | Low | `frontend/app/api/analyze/route.ts:39-43` | The task is started before the history row is written. If the insert fails, the LLM still runs and the user sees an error. | Changing the order changes which failures are visible. |
-| L9 | Low | `frontend/app/api/analyze/route.ts:29` | The whole request body is read before the length limits apply. Field lengths are capped only after parsing. | A body size limit is a small infra decision (Next.js or the host setting). |
-| L10 | Low | `frontend/lib/rate-limit.ts:5` | The limiter is in memory, per server instance, and only covers `/api/analyze`. Billing routes have no limit. README already says the limiter is best effort. | A shared store (Redis, Supabase table) is a real change. |
-| L11 | Low | `frontend/app/api/runs/[id]/route.ts:50,53` | The run route writes status and result with the user's own client. RLS allows it, so a user could change the stored result of their own run. The impact is their own data only. | Moving the write to the admin client is a design choice. |
-| L12 | Low | `tools/qualify-lead.ts:52` | On an OpenRouter error, the response body is put into the thrown error, which Trigger logs. Bodies are unlikely to echo the lead, but this is a leak path. | Logging only the status (as the eval does) is a small change, but it removes debug detail. Decide. |
-| L13 | Low | `frontend/lib/schema.ts` and `tools/schema.ts` | Two copies of the lead and result schemas. F5 reduced the drift risk, but the copies are still separate. | Sharing a file needs an import path that both the Next.js build and the Trigger bundle accept. Not tried here. |
-| L14 | Info | `package.json:5` | `"main": "index.js"` points at a file that does not exist. Harmless. | Left to keep the diff small. |
+| L1 | Medium | `tools/models.ts` (was `tools/qualify-lead.ts:11`) (also `evals/models.json`) | `minimax/minimax-m3.1-flash:free` is **not on OpenRouter's public model list** (checked against 456 listed ids on 2026-10-29). That slot of the free fallback can never succeed. The other three ids exist: `openai/gpt-4o-mini`, `poolside/laguna-s-2.1:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`. | Dead id still in place on purpose. Mansoor picks the replacement after a free eval. To change it: edit `tools/models.ts`, then `evals/models.json` (`tools/models.test.ts` fails if they differ). |
+| L7 | Low | `trigger.config.ts:8-14` | `maxAttempts: 2` makes Trigger rerun the task after a failure. Each rerun is another paid OpenRouter call. | Not changed. Trigger retries are per task run, not per model. One run already tries the paid model, then falls back to free models inside the same attempt, so the config cannot say "1 attempt for paid, 2 for free". Left at 2. Setting `maxAttempts: 1` would apply to both. |
+| L10 | Low | `frontend/lib/rate-limit.ts:5` | The limiter is in memory, per server instance, and only covers `/api/analyze`. Billing routes have no limit. README already says the limiter is best effort. | Skipped. Needs a shared store such as Redis. |
+| L13 | Low | `frontend/lib/schema.ts` and `tools/schema.ts` | Two copies of the lead and result schemas. F5 reduced the drift risk, but the copies are still separate. | Skipped. A shared file would sit outside `frontend/`, so it depends on the Vercel root directory setting (and the Trigger bundle resolving zod from the root). Not verifiable here, and a wrong guess breaks the deploy. The L4 rule is now duplicated in both schemas, with a test in each. |
 
 ---
 
@@ -60,6 +60,6 @@ Status: **Fixed** (changed in this PR, with a test) or **Left** (needs a decisio
 
 ## Verification
 
-- Frontend: `npm run lint` (clean), `npm test` (59 passed, was 47), `npm run build` (passes).
-- Root: `npm run typecheck` (clean), `npm test` (55 passed), `npm run eval -- --mock` (runs).
+- Frontend: `npm run lint` (clean), `npm test` (69 passed, was 59), `npm run build` (passes).
+- Root: `npm run typecheck` (clean), `npm test` (66 passed, was 55), `npm run eval -- --mock` (runs).
 - The OpenRouter model check used OpenRouter's public `/api/v1/models` list, fetched through a web-fetch tool. The sandbox's own network policy blocks `openrouter.ai`, so the check was not made from this sandbox directly.

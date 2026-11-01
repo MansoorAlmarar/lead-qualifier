@@ -2,17 +2,7 @@ import { logger, task } from "@trigger.dev/sdk";
 import { leadSchema, resultSchema, type Lead, type QualificationResult } from "./schema";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
 import { stripCodeFence } from "./parse-reply";
-
-// Swap models here. Any OpenRouter model id works.
-// The paid model is tried first. If OpenRouter refuses it (out of credit, rate limited or down),
-// the task retries with the free models, which need no credit but share rate-limited pools.
-const PAID_MODELS = ["openai/gpt-4o-mini"];
-// OpenRouter accepts at most 3 models per request.
-const FREE_MODELS = [
-  "minimax/minimax-m3.1-flash:free",
-  "poolside/laguna-s-2.1:free",
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
-];
+import { FREE_MODELS, PAID_MODELS } from "./models";
 
 // 402 = out of credit, 429 = rate limited, 5xx = provider trouble.
 const shouldFallBack = (status: number) => status === 402 || status === 429 || status >= 500;
@@ -49,7 +39,8 @@ export async function qualify(payload: unknown, apiKey: string | undefined): Pro
   }
 
   if (!res.ok) {
-    throw new Error(`OpenRouter error ${res.status}: ${await res.text()}`);
+    // Status only. The response body is not logged: it may echo lead data.
+    throw new Error(`OpenRouter error ${res.status}`);
   }
 
   const data = (await res.json()) as {
