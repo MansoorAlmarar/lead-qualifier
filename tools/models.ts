@@ -6,10 +6,9 @@
 export const PAID_MODELS = ["openai/gpt-4o-mini"];
 
 // OpenRouter accepts at most 3 models per request.
-// "minimax/minimax-m3.1-flash:free" is not on OpenRouter's public list (REVIEW.md, L1).
-// It is left in place until the free eval picks a replacement.
+// Both free ids were live and scored on the 40-lead eval in Nov 2026 (REVIEW.md, L1):
+// ultra 90% qualified accuracy at about 7 s, lightning 95% at about 20 s.
 export const FREE_MODELS = [
-  "minimax/minimax-m3.1-flash:free",
-  "poolside/laguna-s-2.1:free",
   "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nvidia/nemotron-3.5-lightning:free",
 ];

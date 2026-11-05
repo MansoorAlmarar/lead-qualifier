@@ -180,7 +180,7 @@ No live run is committed, because that needs a key. The tables below come from m
 - **One run, one setting.** Temperature is 0.2 and each model runs once. Scores vary between runs, and free models vary by time of day.
 - **Latency is local.** It measures one machine's calls to OpenRouter, not the production path.
 - **Mock results are not model results.** Only a live run tells you how a model performs.
-- **One default model id is not on OpenRouter.** `minimax/minimax-m3.1-flash:free` is not in OpenRouter's public model list. It is also in the app's free fallback list. See `REVIEW.md`.
+- **Free model ids change.** Two earlier free ids were retired by OpenRouter. The app's free fallback list now holds the two ids that passed the live eval in Nov 2026. Check `REVIEW.md` (L1) before trusting an old id.
 
 The eval tests are separate from the frontend tests above. They cover the scorer, the parser, the dataset checks and the runner.
 
