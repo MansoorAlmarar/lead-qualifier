@@ -150,9 +150,18 @@ Models come from `EVAL_MODELS` (comma-separated ids), or from `evals/models.json
 
 Mock mode uses two offline stand-ins. `mock:keyword` is a rule-based baseline. `mock:flaky` is the same baseline with deliberate faults. Neither is an LLM. They check the scorer and the parser, and they let the eval run in CI without keys.
 
+**Live results (OpenRouter, free models, 40 fictional leads)**
+
+| Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | Median latency | Run date |
+|---|---|---|---|---|---|---|
+| nvidia/nemotron-3-ultra-550b-a55b:free | 90.0% | 77.5% | 5.1 | 97.5% | 7.2 s | 2026-11-01 |
+| nvidia/nemotron-3.5-lightning:free | 95.0% | 57.5% | 7.4 | 97.5% | 20.6 s | 2026-11-05 |
+
+What they show: both models get the qualify or reject call right on 36 to 38 of 40 leads, but they differ in how well the score lands in the expected band (77.5% vs 57.5%) and in speed (about 3x). Both lost one reply to a network error. Each run is a single call per lead, on different days, so read the gaps as rough: on 40 leads a gap of ten points or less is not meaningful (see Limits). The full tables, with a per-category breakdown, are in `evals/results/live-*.md`. The paid `openai/gpt-4o-mini` has not been scored yet.
+
 **Sample output (mock mode, not an LLM result)**
 
-No live run is committed, because that needs a key. The tables below come from mock mode. They describe the mock models only and say nothing about any AI model. The full file is `evals/results/sample-mock.md`.
+The tables below come from mock mode. They describe the mock models only and say nothing about any AI model. The full file is `evals/results/sample-mock.md`.
 
 | Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | HTTP/network errors | Schema failures | Median latency |
 |---|---|---|---|---|---|---|---|
