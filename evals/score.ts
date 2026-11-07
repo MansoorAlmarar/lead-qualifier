@@ -93,7 +93,7 @@ export function renderMarkdown(report: {
     "",
     mode === "mock"
       ? "**Mode: mock.** These models are offline stand-ins, not LLMs. The numbers test the scorer and the parser. They are not AI model scores."
-      : "**Mode: live.** Replies came from OpenRouter using the app's prompt and schema.",
+      : "**Mode: live.** Replies used the app's prompt and schema. Model ids like `vendor/model` ran through OpenRouter; `claude-cli:*` ids ran through the local Claude CLI (a comparison row, not the production call).",
     "",
     `- Generated: ${generatedAt}`,
     `- Leads: ${datasetSize} fictional leads (\`evals/dataset/leads.json\`)`,

@@ -1,13 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { loadDataset } from "./dataset";
-import { MOCK_MODELS, mockCompletion, openRouterCompletion, type Completion } from "./model";
+import { CLI_PREFIX, MOCK_MODELS, claudeCliCompletion, mockCompletion, openRouterCompletion, type Completion } from "./model";
 import { resolveModels, runModel } from "./runner";
 import { renderMarkdown, scoreModel, type ModelScore } from "./score";
 
 // Usage:
 //   npm run eval -- --mock                 offline, no keys, no cost
 //   npm run eval                           live, needs OPENROUTER_API_KEY
+//   EVAL_MODELS=claude-cli:haiku npm run eval   Claude through the local CLI: no key, uses plan usage
 //   npm run eval -- --out path/to/file.md  choose the output file
 function argValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -25,16 +26,19 @@ async function main() {
     models = MOCK_MODELS;
     completionFor = mockCompletion;
   } else {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENROUTER_API_KEY is not set. Run with --mock to work offline.");
-    }
     models = resolveModels(process.env);
-    const live = openRouterCompletion(apiKey);
-    // mock:* ids always stay offline, so a config can mix both.
-    completionFor = (model) => (model.startsWith("mock:") ? mockCompletion(model) : live);
+    const isMock = (model: string) => model.startsWith("mock:");
+    const isCli = (model: string) => model.startsWith(CLI_PREFIX);
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey && models.some((model) => !isMock(model) && !isCli(model))) {
+      throw new Error("OPENROUTER_API_KEY is not set. Run with --mock, or use claude-cli:* models, to work without a key.");
+    }
+    const live = apiKey ? openRouterCompletion(apiKey) : undefined;
+    const cli = claudeCliCompletion();
+    // mock:* ids always stay offline and claude-cli:* ids use the local CLI, so a config can mix all three.
+    completionFor = (model) => (isMock(model) ? mockCompletion(model) : isCli(model) ? cli : (live as Completion));
     process.stderr.write(
-      `Live run: ${leads.length} fictional leads x ${models.length} model(s). This uses OpenRouter credit.\n`,
+      `Live run: ${leads.length} fictional leads x ${models.length} model(s). OpenRouter models use credit; claude-cli models use plan usage.\n`,
     );
   }
 

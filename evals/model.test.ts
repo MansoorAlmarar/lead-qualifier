@@ -2,7 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SYSTEM_PROMPT } from "../tools/prompt";
 import { leadSchema } from "../tools/schema";
 import { loadDataset } from "./dataset";
-import { MOCK_MODELS, OPENROUTER_URL, keywordVerdict, mockCompletion, openRouterCompletion, parseModelOutput } from "./model";
+import {
+  CLI_PREFIX,
+  MOCK_MODELS,
+  OPENROUTER_URL,
+  claudeCliArgs,
+  claudeCliCompletion,
+  keywordVerdict,
+  mockCompletion,
+  openRouterCompletion,
+  parseModelOutput,
+} from "./model";
 
 const valid = { qualified: true, score: 80, reasoning: "Clear need.", next_step: "Book a call.", red_flags: [] };
 
@@ -125,5 +135,26 @@ describe("openRouterCompletion", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ choices: [] }))));
     const completion = openRouterCompletion("test-key");
     await expect(completion({ model: "m", lead, leadId: "x" })).rejects.toThrow("no content");
+  });
+});
+
+describe("claude CLI adapter", () => {
+  it("runs with tools off and keeps the lead out of the arguments", () => {
+    const args = claudeCliArgs("haiku", "SYSTEM TEXT");
+    expect(args[args.indexOf("--model") + 1]).toBe("haiku");
+    expect(args[args.indexOf("--tools") + 1]).toBe("");
+    expect(args[args.indexOf("--system-prompt") + 1]).toBe("SYSTEM TEXT");
+    expect(args).toContain("--no-session-persistence");
+  });
+
+  it("uses a prefix that no mock or OpenRouter id starts with", () => {
+    expect(CLI_PREFIX).toBe("claude-cli:");
+    expect(MOCK_MODELS.some((model) => model.startsWith(CLI_PREFIX))).toBe(false);
+  });
+
+  it("fails with a clear message when the CLI is missing", async () => {
+    const lead = loadDataset()[0].lead;
+    const completion = claudeCliCompletion("definitely-not-a-real-claude-binary");
+    await expect(completion({ model: "claude-cli:haiku", lead, leadId: "x" })).rejects.toThrow(/failed to start/);
   });
 });

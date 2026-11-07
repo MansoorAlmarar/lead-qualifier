@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { SYSTEM_PROMPT, buildUserPrompt } from "../tools/prompt";
 import { resultSchema, type Lead, type QualificationResult } from "../tools/schema";
 import { stripCodeFence } from "../tools/parse-reply";
@@ -38,6 +42,57 @@ export function openRouterCompletion(apiKey: string): Completion {
     if (!content) throw new Error("OpenRouter returned no content");
     return content;
   };
+}
+
+export const CLI_PREFIX = "claude-cli:";
+export const CLI_TIMEOUT_MS = 180_000;
+
+/** The CLI arguments. Tools are off, so the model can only answer; the prompt goes on stdin, not in the arguments. */
+export function claudeCliArgs(model: string, system: string): string[] {
+  return [
+    "-p", "--model", model, "--effort", "low", "--output-format", "json", "--system-prompt", system,
+    "--tools", "", "--disable-slash-commands", "--no-session-persistence",
+  ];
+}
+
+/**
+ * Runs the local `claude` CLI on a Claude subscription (no API key, no per-call dollars, but it uses plan usage).
+ * Model ids look like "claude-cli:haiku". Set CLAUDE_EXE to the full path if `claude` is not on PATH.
+ * It runs from an empty temp folder so no project instructions are loaded. Same prompt as the app; the CLI has no
+ * temperature or JSON-mode switch, so this is a comparison row, not the production call.
+ */
+export function claudeCliCompletion(exe = process.env.CLAUDE_EXE || "claude"): Completion {
+  return ({ model, lead }) =>
+    new Promise<string>((resolve, reject) => {
+      const cliModel = model.slice(CLI_PREFIX.length) || "haiku";
+      const cwd = mkdtempSync(path.join(tmpdir(), "lq-eval-"));
+      const child = spawn(exe, claudeCliArgs(cliModel, SYSTEM_PROMPT), { cwd, stdio: ["pipe", "pipe", "pipe"] });
+      let out = "";
+      const timer = setTimeout(() => child.kill(), CLI_TIMEOUT_MS);
+      const done = (fn: () => void) => {
+        clearTimeout(timer);
+        rmSync(cwd, { recursive: true, force: true });
+        fn();
+      };
+      child.stdout.on("data", (chunk) => (out += chunk));
+      child.on("error", (error) => done(() => reject(new Error(`claude CLI failed to start: ${error.message}`))));
+      child.on("close", (code) =>
+        done(() => {
+          // Log the exit code only. The reply and the lead are personal data.
+          let data: { result?: string; is_error?: boolean };
+          try {
+            data = JSON.parse(out);
+          } catch {
+            return reject(new Error(`claude CLI exit ${code}: no JSON output`));
+          }
+          if (data.is_error || code !== 0) return reject(new Error(`claude CLI error (exit ${code})`));
+          if (!data.result) return reject(new Error("claude CLI returned no content"));
+          resolve(data.result);
+        }),
+      );
+      child.stdin.on("error", () => undefined);
+      child.stdin.end(buildUserPrompt(lead));
+    });
 }
 
 export type ParseOutcome = { ok: true; result: QualificationResult } | { ok: false; reason: string };

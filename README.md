@@ -146,7 +146,7 @@ Live, through OpenRouter. This needs `OPENROUTER_API_KEY` and uses credit. CI ne
 OPENROUTER_API_KEY=your-key npm run eval
 ```
 
-Models come from `EVAL_MODELS` (comma-separated ids), or from `evals/models.json` if that is not set. The default list is the models the app uses. Each run prints a Markdown table and writes it to `evals/results/`.
+Models come from `EVAL_MODELS` (comma-separated ids), or from `evals/models.json` if that is not set. An id that starts with `claude-cli:` (for example `EVAL_MODELS=claude-cli:haiku npm run eval`) runs through the local Claude CLI and needs no OpenRouter key; set `CLAUDE_EXE` to its full path if `claude` is not on PATH. The default list is the models the app uses. Each run prints a Markdown table and writes it to `evals/results/`.
 
 Mock mode uses two offline stand-ins. `mock:keyword` is a rule-based baseline. `mock:flaky` is the same baseline with deliberate faults. Neither is an LLM. They check the scorer and the parser, and they let the eval run in CI without keys.
 
@@ -156,8 +156,11 @@ Mock mode uses two offline stand-ins. `mock:keyword` is a rule-based baseline. `
 |---|---|---|---|---|---|---|
 | nvidia/nemotron-3-ultra-550b-a55b:free | 90.0% | 77.5% | 5.1 | 97.5% | 7.2 s | 2026-11-01 |
 | nvidia/nemotron-3.5-lightning:free | 95.0% | 57.5% | 7.4 | 97.5% | 20.6 s | 2026-11-05 |
+| claude-cli:haiku (comparison, see below) | 95.0% | 77.5% | 4.4 | 100.0% | 6.1 s | 2026-11-07 |
 
-What they show: both models get the qualify or reject call right on 36 to 38 of 40 leads, but they differ in how well the score lands in the expected band (77.5% vs 57.5%) and in speed (about 3x). Both lost one reply to a network error. Each run is a single call per lead, on different days, so read the gaps as rough: on 40 leads a gap of ten points or less is not meaningful (see Limits). The full tables, with a per-category breakdown, are in `evals/results/live-*.md`. The paid `openai/gpt-4o-mini` has not been scored yet.
+What they show: all three get the qualify or reject call right on 36 to 38 of 40 leads. They differ in how well the score lands in the expected band (57.5% to 77.5%), in speed (6 s to 21 s) and in reliability: the two free models each lost one reply to a network error, Haiku lost none. Each run is a single call per lead, on different days, so read the gaps as rough: on 40 leads a gap of ten points or less is not meaningful (see Limits). The full tables, with a per-category breakdown, are in `evals/results/live-*.md`. The paid `openai/gpt-4o-mini` has not been scored yet.
+
+The `claude-cli:haiku` row is a **comparison, not the production path**. It runs the same prompt and schema through the local Claude CLI on a Claude subscription: no API key and no per-call dollars, but it uses plan usage, and the CLI has no temperature or JSON-mode switch. Use it to see how a stronger model scores on the same leads, not to predict what the deployed app returns.
 
 **Sample output (mock mode, not an LLM result)**
 
