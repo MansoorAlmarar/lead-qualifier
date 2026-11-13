@@ -27,6 +27,29 @@ describe("qualify", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("falls back to the free models when the paid call throws (network error or timeout)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new DOMException("timed out", "TimeoutError"))
+      .mockResolvedValueOnce(ok(verdict));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await qualify(lead, "k")).toEqual(verdict);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws when the free fallback call also throws", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    await expect(qualify(lead, "k")).rejects.toThrow("fetch failed");
+  });
+
+  it("sends every OpenRouter call with a timeout signal", async () => {
+    const fetchMock = vi.fn(async () => ok(verdict));
+    vi.stubGlobal("fetch", fetchMock);
+    await qualify(lead, "k");
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("does not leak the body when the free fallback also fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("echo Sara Khan", { status: 503 })));
     const err = await qualify(lead, "k").catch((e: Error) => e);

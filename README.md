@@ -47,7 +47,7 @@ Supabase: auth + lead_history + subscriptions      Stripe (test mode): Checkout,
 - **Supabase:** Auth, plus `lead_history` and `subscriptions` tables. Row-level security limits users to their own rows (`supabase/schema.sql`, `supabase/billing.sql`).
 - **Trigger.dev:** runs the long-ish LLM call outside the request. The browser polls `/api/runs/:id` for the result. The Trigger.dev secret key is only used in server routes.
 - **Stripe (test mode):** Checkout for the $29/month Pro plan, the customer portal for cancel and card changes, and a signature-verified webhook (`/api/stripe/webhook`) that keeps `subscriptions` in sync.
-- **Model fallback:** the task tries a paid model first (`openai/gpt-4o-mini`), then falls back to free OpenRouter models on credit, rate limit or provider errors. Model ids live in `tools/qualify-lead.ts`.
+- **Model fallback:** the task tries a paid model first (`openai/gpt-4o-mini`), then falls back to free OpenRouter models on credit, rate limit or provider errors. Model ids live in `tools/models.ts`.
 
 ### The WAT framework
 
@@ -81,6 +81,8 @@ frontend/                     Next.js app (deployed to Vercel)
 evals/                        model comparison: labelled fictional leads, runner, scorer
 supabase/schema.sql           history table and row-level security policies
 supabase/billing.sql          subscriptions table (written by the Stripe webhook)
+supabase/claim-analysis.sql   claim_analysis function (daily quota check before each run)
+supabase/drop-history-write-policies.sql   one-time fix for a database made from the older schema.sql
 docs/cv-bullets.md            CV and LinkedIn wording for this project
 ```
 
@@ -90,7 +92,7 @@ Requires Node 20+, a Trigger.dev account, an OpenRouter API key, a Supabase proj
 
 1. Install: `npm install` in the root and in `frontend/`.
 2. Set `OPENROUTER_API_KEY` in your Trigger.dev project (Development environment).
-3. Run `supabase/schema.sql` and `supabase/billing.sql` in the Supabase SQL Editor.
+3. Run `supabase/schema.sql`, `supabase/billing.sql` and `supabase/claim-analysis.sql` in the Supabase SQL Editor, in that order. Without the last one, every analysis fails with a 502. A database set up before November 2026 also needs `supabase/drop-history-write-policies.sql` and a re-run of `supabase/claim-analysis.sql` (see the notes at the top of each file).
 4. Copy `frontend/.env.example` to `frontend/.env.local` and fill in the variables below.
 5. In the root: `npx trigger.dev@latest dev`
 6. Install the Stripe CLI, run `stripe login`, then `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Put the signing secret it prints in `STRIPE_WEBHOOK_SECRET`.
@@ -108,7 +110,7 @@ Names only. Values go in `frontend/.env.local`, Vercel, or the Trigger.dev dashb
 | `TRIGGER_SECRET_KEY` | Frontend server (`.env.local` / Vercel) | Server-side only |
 | `NEXT_PUBLIC_SUPABASE_URL` | Frontend | Public by design |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Frontend | Public by design; row-level security protects data |
-| `SUPABASE_SERVICE_ROLE_KEY` | Frontend server | Used by the webhook; never `NEXT_PUBLIC_` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Frontend server | Used by the server routes (analyze, runs, checkout, webhook); never `NEXT_PUBLIC_` |
 | `STRIPE_SECRET_KEY` | Frontend server | Test-mode key |
 | `STRIPE_WEBHOOK_SECRET` | Frontend server | From `stripe listen` or the webhook endpoint |
 | `STRIPE_PRICE_ID` | Frontend server | Test-mode Pro price |
@@ -150,7 +152,7 @@ Models come from `EVAL_MODELS` (comma-separated ids), or from `evals/models.json
 
 Mock mode uses two offline stand-ins. `mock:keyword` is a rule-based baseline. `mock:flaky` is the same baseline with deliberate faults. Neither is an LLM. They check the scorer and the parser, and they let the eval run in CI without keys.
 
-**Live results (OpenRouter, free models, 40 fictional leads)**
+**Live results (40 fictional leads: two free OpenRouter models and one Claude CLI comparison)**
 
 | Model | Qualified accuracy | Score-band hit rate | MAE (points) | Schema-valid rate | Median latency | Run date |
 |---|---|---|---|---|---|---|
@@ -203,7 +205,7 @@ Honest list of what this is not:
 - **Stripe is in test mode.** Pro is a demo of the billing flow, not a live product.
 - **Visitors must sign up** before they can try it. A public, no-login demo would need a stricter abuse plan.
 - **The rate limiter is in memory.** On serverless each instance has its own memory, so it slows casual abuse but is not a hard guarantee. The daily quota is enforced from the database.
-- **Test coverage is partial.** 47 Vitest tests cover lead validation, the Dubai-time daily quota, the rate limiter and the API routes (`/api/analyze`, `/api/stripe/webhook`, `/api/billing/*`) with Supabase, Stripe and Trigger.dev mocked. Not tested yet: `/api/runs/[id]`, the auth routes, the Trigger.dev task, the UI and any end-to-end flow.
+- **Test coverage is partial.** About 70 Vitest tests in the frontend (and about 70 more at the root, for the task and the eval) cover lead validation, the Dubai-time daily quota, the rate limiter and the API routes (`/api/analyze`, `/api/runs/[id]`, `/api/stripe/webhook`, `/api/billing/*`) with Supabase, Stripe and Trigger.dev mocked. Not tested yet: the database policies and the `claim_analysis` function (nothing runs against a real Postgres), the auth routes, the UI and any end-to-end flow.
 - **Free fallback models** can be slow or rate limited, and result quality varies by model.
 - **Scoring criteria are fixed** for a fictional agency (see `workflows/lead-qualifier.md`). Next step: make them editable per user.
 - **Other ideas:** CSV bulk import, CRM export, push result updates instead of polling, live model results in the eval set.

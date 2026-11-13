@@ -7,6 +7,9 @@ import { FREE_MODELS, PAID_MODELS } from "./models";
 // 402 = out of credit, 429 = rate limited, 5xx = provider trouble.
 const shouldFallBack = (status: number) => status === 402 || status === 429 || status >= 500;
 
+// Per call. Paid then free is two calls, so both fit inside the task's 60 s maxDuration (trigger.config.ts).
+export const REQUEST_TIMEOUT_MS = 25_000;
+
 async function callOpenRouter(apiKey: string, models: string[], lead: Lead): Promise<Response> {
   return fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -14,6 +17,7 @@ async function callOpenRouter(apiKey: string, models: string[], lead: Lead): Pro
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     body: JSON.stringify({
       models,
       temperature: 0.2,
@@ -32,9 +36,16 @@ export async function qualify(payload: unknown, apiKey: string | undefined): Pro
 
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
-  let res = await callOpenRouter(apiKey, PAID_MODELS, lead);
-  if (!res.ok && shouldFallBack(res.status)) {
-    logger.warn(`Paid model failed with ${res.status}, falling back to free models`);
+  let res: Response | undefined;
+  try {
+    res = await callOpenRouter(apiKey, PAID_MODELS, lead);
+  } catch (err) {
+    // A network error or a timeout throws instead of returning a status. Fall back the same way.
+    // Name only (for example TimeoutError). The message is not logged.
+    logger.warn(`Paid model call failed (${err instanceof Error ? err.name : "error"}), falling back to free models`);
+  }
+  if (!res || (!res.ok && shouldFallBack(res.status))) {
+    if (res) logger.warn(`Paid model failed with ${res.status}, falling back to free models`);
     res = await callOpenRouter(apiKey, FREE_MODELS, lead);
   }
 

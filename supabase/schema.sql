@@ -22,8 +22,7 @@ create policy "read own history" on public.lead_history
 create policy "insert own history" on public.lead_history
   for insert to authenticated with check (user_id = auth.uid());
 
-create policy "update own history" on public.lead_history
-  for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
-
-create policy "delete own history" on public.lead_history
-  for delete to authenticated using (user_id = auth.uid());
+-- No update or delete policies on purpose. The daily limit counts these rows, so a user who could
+-- change or delete them could reset their own quota. The server writes status and result with the
+-- service-role key. A database created from an older copy of this file still has both policies:
+-- run supabase/drop-history-write-policies.sql to remove them.

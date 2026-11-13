@@ -63,3 +63,25 @@ Status: **Fixed** (changed in this PR, with a test) or **Left** (needs a decisio
 - Frontend: `npm run lint` (clean), `npm test` (69 passed, was 59), `npm run build` (passes).
 - Root: `npm run typecheck` (clean), `npm test` (66 passed, was 55), `npm run eval -- --mock` (runs).
 - The OpenRouter model check used OpenRouter's public `/api/v1/models` list, fetched through a web-fetch tool. The sandbox's own network policy blocks `openrouter.ai`, so the check was not made from this sandbox directly.
+
+---
+
+## Second review, 2026-11-14
+
+A later read-only review found the items below. All are changed in the working tree, with tests where a test is possible.
+
+| # | Sev | Where | Finding | Fix and test |
+|---|---|---|---|---|
+| R1 | High | `supabase/schema.sql` (old "update own history" and "delete own history" policies) | The free daily limit counts the user's own `lead_history` rows. Users could update or delete those rows with their own token, so one call from the browser console reset the count to 0. This replaces the note on L11 above: dropping the policies is **required**, not optional. | Both policies are removed from `supabase/schema.sql`. New migration `supabase/drop-history-write-policies.sql` drops them on an existing database. **It must be run by hand in the Supabase SQL Editor. Until then the live database is still open to this.** No automated test: nothing runs against a real Postgres. |
+| R2 | Medium | `frontend/app/api/stripe/webhook/route.ts` | The webhook wrote the event's own copy of the subscription, matched only by customer. An out-of-order event, or an event for a second subscription of the same customer (for example a failed first payment that later expires), could downgrade a paying user. | The route now retrieves the current subscription from Stripe, and skips the write when the row holds a different subscription that is `active` or `trialing`. Tests: `stripe-webhook.test.ts` (out-of-order event, second subscription, replaced inactive subscription, retrieve failure). |
+| R3 | Medium | `frontend/lib/billing.ts`, `supabase/claim-analysis.sql` | The 10 minute rule from L3 above let a client that never polls start 2 paid LLM calls every 10 minutes without using quota. | L3 is reversed. Every row created today counts, except `failed`. `claim_analysis` now takes three arguments (`p_stale_before` is gone). **`supabase/claim-analysis.sql` must be run again by hand**, before the new frontend is deployed. See the upgrade note at the top of that file. Tests: `lib/__tests__/billing.test.ts`, `analyze.test.ts`. |
+| R4 | Low | `tools/qualify-lead.ts` | No timeout on the OpenRouter call, and a network error on the paid call skipped the free fallback. | Each call has a 25 s timeout. A thrown paid call falls back to the free models. Tests: `tools/qualify-lead.test.ts`. |
+| R5 | Low | `frontend/components/PlanBar.tsx` | `res.json()` showed a raw parser message on a non-JSON reply. | Uses `readJson`. |
+| R6 | Low | `frontend/components/LeadQualifier.tsx` | The "wait for Pro" loop after checkout looked at `document.referrer`, which is often stripped. | It checks the `?upgraded=1` query that checkout already returns to. |
+| R7 | Low | `frontend/app/api/billing/checkout/route.ts` | A `past_due` user could start a second subscription. | Checkout returns 409 with code `past_due`, and the Upgrade button opens the billing portal instead. Test: `billing.test.ts`. |
+| R8 | Low | `frontend/app/api/stripe/webhook/route.ts` | A missing `STRIPE_WEBHOOK_SECRET` looked like a bad signature (400). | Returns 500 and logs the cause. Test: `stripe-webhook.test.ts`. |
+| R9 | Low | `frontend/components/LeadQualifier.tsx` | Two identical red flags gave a duplicate React key. | The key includes the index. |
+
+Not changed, by decision: the one-way 60 point rule in `resultSchema`, per-lead eval result files, the `npm audit` findings that come in through `@trigger.dev/sdk`, and the LICENSE file.
+
+Verification: frontend `npm run lint` (clean), `npm test` (76 passed, was 69), `npm run build` (passes). Root `npm run typecheck` (clean), `npm test` (72 passed, was 69), `npm run eval -- --mock` (runs). The UI changes (R5, R6, R7, R9) were not clicked through in a browser.

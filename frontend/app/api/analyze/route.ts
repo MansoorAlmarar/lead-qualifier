@@ -1,6 +1,6 @@
 import { tasks } from "@trigger.dev/sdk";
 import { leadSchema } from "@/lib/schema";
-import { PENDING_TTL_MS, getUsage, startOfDubaiDay } from "@/lib/billing";
+import { getUsage, startOfDubaiDay } from "@/lib/billing";
 import { BodyTooLargeError, readLimitedText } from "@/lib/body";
 import { rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -41,7 +41,6 @@ export async function POST(request: Request) {
     p_lead: parsed.data,
     p_limit: limit,
     p_since: startOfDubaiDay().toISOString(),
-    p_stale_before: new Date(Date.now() - PENDING_TTL_MS).toISOString(),
   });
   if (claimError) {
     console.error("claim failed:", claimError.code);

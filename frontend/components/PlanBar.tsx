@@ -1,13 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { readJson } from "@/lib/api";
 import type { Usage } from "@/lib/billing";
+
+const CHECKOUT = "/api/billing/checkout";
+const PORTAL = "/api/billing/portal";
 
 async function goTo(path: string, setError: (m: string) => void, setBusy: (b: boolean) => void) {
   setBusy(true);
   try {
-    const res = await fetch(path, { method: "POST" });
-    const data = await res.json();
+    let res = await fetch(path, { method: "POST" });
+    let data = await readJson<{ url: string; error: string; code: string }>(res);
+    // A failed payment is fixed in the billing portal, not with a second subscription.
+    if (path === CHECKOUT && data.code === "past_due") {
+      res = await fetch(PORTAL, { method: "POST" });
+      data = await readJson<{ url: string; error: string; code: string }>(res);
+    }
     if (!res.ok || !data.url) throw new Error(data.error ?? "Something went wrong.");
     window.location.href = data.url;
   } catch (err) {
@@ -49,7 +58,7 @@ export function PlanBar({ usage }: { usage: Usage | null }) {
           <button
             type="button"
             disabled={busy}
-            onClick={() => goTo("/api/billing/checkout", setError, setBusy)}
+            onClick={() => goTo(CHECKOUT, setError, setBusy)}
             className={`${button} bg-indigo-600 text-white hover:bg-indigo-500`}
           >
             {busy ? "Opening…" : "Upgrade to Pro, $29/month (test mode)"}
@@ -58,7 +67,7 @@ export function PlanBar({ usage }: { usage: Usage | null }) {
           <button
             type="button"
             disabled={busy}
-            onClick={() => goTo("/api/billing/portal", setError, setBusy)}
+            onClick={() => goTo(PORTAL, setError, setBusy)}
             className={`${button} border border-zinc-300 hover:border-indigo-500 dark:border-zinc-700`}
           >
             {busy ? "Opening…" : "Manage subscription"}

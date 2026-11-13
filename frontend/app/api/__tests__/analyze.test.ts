@@ -116,10 +116,12 @@ describe("POST /api/analyze", () => {
     const lead = { ...validLead, company: "Gulf Logistics LLC" };
     // The task gets the parsed (trimmed) lead, not the raw body.
     expect(mocks.trigger).toHaveBeenCalledWith("qualify-lead", lead);
-    expect(mocks.rpc).toHaveBeenCalledWith(
-      "claim_analysis",
-      expect.objectContaining({ p_lead: lead, p_limit: 2 }),
-    );
+    // Exactly three arguments: the pending time limit (p_stale_before) is gone.
+    expect(mocks.rpc).toHaveBeenCalledWith("claim_analysis", {
+      p_lead: lead,
+      p_limit: 2,
+      p_since: expect.any(String),
+    });
     expect(mocks.adminUpdate).toHaveBeenCalledWith({ run_id: "run_123" });
     // The row is claimed before the task starts.
     expect(mocks.rpc.mock.invocationCallOrder[0]).toBeLessThan(mocks.trigger.mock.invocationCallOrder[0]);

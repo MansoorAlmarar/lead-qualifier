@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FREE_DAILY_LIMIT, PENDING_TTL_MS, getUsage, startOfDubaiDay } from "../billing";
+import { FREE_DAILY_LIMIT, getUsage, startOfDubaiDay } from "../billing";
 
 describe("startOfDubaiDay", () => {
   it("returns Dubai midnight, which is 20:00 UTC the day before", () => {
@@ -20,7 +20,7 @@ afterEach(() => vi.useRealTimers());
 
 // Minimal stand-in for the two queries getUsage runs.
 function fakeSupabase(subscriptionStatus: string | null, runCount: number | null) {
-  const calls = { or: [] as unknown[][] };
+  const calls = { gte: [] as unknown[][], neq: [] as unknown[][] };
   const client = {
     from(table: string) {
       if (table === "subscriptions") {
@@ -31,9 +31,12 @@ function fakeSupabase(subscriptionStatus: string | null, runCount: number | null
         };
       }
       const query = {
-        gte: () => query,
-        or: (...args: unknown[]) => {
-          calls.or.push(args);
+        gte: (...args: unknown[]) => {
+          calls.gte.push(args);
+          return query;
+        },
+        neq: (...args: unknown[]) => {
+          calls.neq.push(args);
           return Promise.resolve({ count: runCount });
         },
       };
@@ -63,14 +66,13 @@ describe("getUsage", () => {
     }
   });
 
-  it("counts done runs and recent pending runs, but not failed or stale pending runs", async () => {
+  it("counts every run started today except failed ones, with no time limit on pending runs", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-10-27T10:00:00Z"));
     const { client, calls } = fakeSupabase(null, 0);
     await getUsage(client);
-    const cutoff = new Date(Date.parse("2026-10-27T10:00:00Z") - PENDING_TTL_MS).toISOString();
-    expect(PENDING_TTL_MS).toBe(10 * 60 * 1000);
-    expect(calls.or).toEqual([[`status.eq.done,and(status.eq.pending,created_at.gte.${cutoff})`]]);
+    expect(calls.gte).toEqual([["created_at", "2026-10-26T20:00:00.000Z"]]);
+    expect(calls.neq).toEqual([["status", "failed"]]);
   });
 
   it("treats a null count as zero", async () => {

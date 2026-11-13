@@ -6,16 +6,22 @@ const WEBHOOK_SECRET = "whsec_test_placeholder";
 const stripe = new Stripe("sk_test_placeholder");
 
 const mocks = vi.hoisted(() => ({
-  select: vi.fn(),
+  retrieve: vi.fn(),
+  readRow: vi.fn(),
+  readEq: vi.fn(),
   update: vi.fn(),
-  eq: vi.fn(),
+  updateEq: vi.fn(),
 }));
 
-vi.mock("@/lib/stripe", () => ({ getStripe: () => stripe }));
+// Real signature checking, but the subscription lookup is stubbed so nothing calls Stripe.
+vi.mock("@/lib/stripe", () => ({
+  getStripe: () => ({ webhooks: stripe.webhooks, subscriptions: { retrieve: mocks.retrieve } }),
+}));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
-      update: mocks.update.mockReturnValue({ eq: mocks.eq.mockReturnValue({ select: mocks.select }) }),
+      select: () => ({ eq: mocks.readEq.mockReturnValue({ maybeSingle: mocks.readRow }) }),
+      update: mocks.update.mockReturnValue({ eq: mocks.updateEq }),
     }),
   }),
 }));
@@ -34,27 +40,31 @@ function signedRequest(payload: object, opts: { secret?: string; header?: string
   return new Request("http://localhost/api/stripe/webhook", { method: "POST", body, headers });
 }
 
+const subscription = (overrides: object = {}) => ({
+  id: "sub_1",
+  object: "subscription",
+  customer: "cus_1",
+  status: "active",
+  cancel_at_period_end: false,
+  ...overrides,
+});
+
 const subscriptionEvent = (type: string, overrides: object = {}) => ({
   id: "evt_1",
   object: "event",
   type,
-  data: {
-    object: {
-      id: "sub_1",
-      object: "subscription",
-      customer: "cus_1",
-      status: "active",
-      cancel_at_period_end: false,
-      ...overrides,
-    },
-  },
+  data: { object: subscription(overrides) },
 });
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET);
   vi.spyOn(console, "error").mockImplementation(() => {});
-  mocks.select.mockResolvedValue({ data: [{ user_id: "user-1" }], error: null });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  // By default Stripe's current state equals the event, and the row is new (no subscription yet).
+  mocks.retrieve.mockImplementation(async (id: string) => subscription({ id }));
+  mocks.readRow.mockResolvedValue({ data: { stripe_subscription_id: null, status: "none" }, error: null });
+  mocks.updateEq.mockResolvedValue({ error: null });
 });
 
 describe("POST /api/stripe/webhook", () => {
@@ -81,15 +91,25 @@ describe("POST /api/stripe/webhook", () => {
     });
     const res = await POST(tampered);
     expect(res.status).toBe(400);
+    expect(mocks.retrieve).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
-  it("happy path: a valid subscription update is written to the matching customer", async () => {
+  it("returns 500, not 400, when the webhook secret is not configured", async () => {
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
+    const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created")));
+    expect(res.status).toBe(500);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("happy path: the current subscription is written to the matching customer", async () => {
+    mocks.retrieve.mockResolvedValue(subscription({ cancel_at_period_end: true }));
     const res = await POST(
       signedRequest(subscriptionEvent("customer.subscription.updated", { cancel_at_period_end: true })),
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true });
+    expect(mocks.retrieve).toHaveBeenCalledWith("sub_1");
     expect(mocks.update).toHaveBeenCalledWith(
       expect.objectContaining({
         stripe_subscription_id: "sub_1",
@@ -97,34 +117,81 @@ describe("POST /api/stripe/webhook", () => {
         cancel_at_period_end: true,
       }),
     );
-    expect(mocks.eq).toHaveBeenCalledWith("stripe_customer_id", "cus_1");
+    expect(mocks.updateEq).toHaveBeenCalledWith("stripe_customer_id", "cus_1");
+  });
+
+  it("out-of-order event: writes Stripe's current state, not the older copy in the event", async () => {
+    // An old "incomplete" event arrives after the subscription already became active.
+    mocks.readRow.mockResolvedValue({ data: { stripe_subscription_id: "sub_1", status: "active" }, error: null });
+    mocks.retrieve.mockResolvedValue(subscription({ status: "active" }));
+    const res = await POST(signedRequest(subscriptionEvent("customer.subscription.updated", { status: "incomplete" })));
+    expect(res.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: "active" }));
+    expect(mocks.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: "incomplete" }));
+  });
+
+  it("second subscription: does not overwrite a different subscription that is active", async () => {
+    // sub_1 is the paid one. sub_old was a failed first payment that has now expired.
+    mocks.readRow.mockResolvedValue({ data: { stripe_subscription_id: "sub_1", status: "active" }, error: null });
+    mocks.retrieve.mockResolvedValue(subscription({ id: "sub_old", status: "incomplete_expired" }));
+    const res = await POST(
+      signedRequest(subscriptionEvent("customer.subscription.updated", { id: "sub_old", status: "incomplete_expired" })),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("second subscription: replaces a stored subscription that no longer gives access", async () => {
+    mocks.readRow.mockResolvedValue({ data: { stripe_subscription_id: "sub_old", status: "canceled" }, error: null });
+    mocks.retrieve.mockResolvedValue(subscription({ id: "sub_2" }));
+    const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created", { id: "sub_2" })));
+    expect(res.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ stripe_subscription_id: "sub_2", status: "active" }),
+    );
   });
 
   it("handles an expanded customer object", async () => {
-    const res = await POST(
-      signedRequest(subscriptionEvent("customer.subscription.deleted", { customer: { id: "cus_2" }, status: "canceled" })),
-    );
+    mocks.retrieve.mockResolvedValue(subscription({ customer: { id: "cus_2" }, status: "canceled" }));
+    const res = await POST(signedRequest(subscriptionEvent("customer.subscription.deleted", { status: "canceled" })));
     expect(res.status).toBe(200);
-    expect(mocks.eq).toHaveBeenCalledWith("stripe_customer_id", "cus_2");
+    expect(mocks.readEq).toHaveBeenCalledWith("stripe_customer_id", "cus_2");
+    expect(mocks.updateEq).toHaveBeenCalledWith("stripe_customer_id", "cus_2");
   });
 
   it("returns 200 and logs a warning when no customer row matches", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    mocks.select.mockResolvedValue({ data: [], error: null });
+    mocks.readRow.mockResolvedValue({ data: null, error: null });
     const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created")));
     expect(res.status).toBe(200);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("no matching customer"), "customer.subscription.created");
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when Stripe cannot return the subscription, so Stripe retries", async () => {
+    mocks.retrieve.mockRejectedValue(new Error("network"));
+    const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created")));
+    expect(res.status).toBe(500);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when the database read errors", async () => {
+    mocks.readRow.mockResolvedValue({ data: null, error: { code: "XX000" } });
+    const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created")));
+    expect(res.status).toBe(500);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("returns 500 when the database update errors", async () => {
-    mocks.select.mockResolvedValue({ data: null, error: { code: "XX000" } });
+    mocks.updateEq.mockResolvedValue({ error: { code: "XX000" } });
     const res = await POST(signedRequest(subscriptionEvent("customer.subscription.created")));
     expect(res.status).toBe(500);
   });
 
-  it("acknowledges unrelated event types without touching the database", async () => {
+  it("acknowledges unrelated event types without touching Stripe or the database", async () => {
     const res = await POST(signedRequest({ id: "evt_2", object: "event", type: "invoice.paid", data: { object: {} } }));
     expect(res.status).toBe(200);
+    expect(mocks.retrieve).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
 });

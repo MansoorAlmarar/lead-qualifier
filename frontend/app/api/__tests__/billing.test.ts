@@ -77,6 +77,14 @@ describe("POST /api/billing/checkout", () => {
     expect(mocks.sessionsCreate).not.toHaveBeenCalled();
   });
 
+  it("returns 409 past_due, and starts no second checkout, when the last payment failed", async () => {
+    mocks.adminMaybeSingle.mockResolvedValue({ data: { stripe_customer_id: "cus_1", status: "past_due" } });
+    const res = await checkoutPOST(req("/api/billing/checkout"));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("past_due");
+    expect(mocks.sessionsCreate).not.toHaveBeenCalled();
+  });
+
   it("happy path: creates a customer, saves it, and returns the checkout url", async () => {
     mocks.adminMaybeSingle.mockResolvedValue({ data: null });
     mocks.customersCreate.mockResolvedValue({ id: "cus_new" });
