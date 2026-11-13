@@ -73,7 +73,8 @@ export function LeadQualifier() {
     (async () => {
       const first = await refreshUsage();
       // Coming back from Stripe Checkout: the webhook can take a few seconds to mark the user as Pro.
-      const fromStripe = document.referrer.includes("stripe.com");
+      // Checkout returns to /?upgraded=1. The referrer is often stripped, so it is not used.
+      const fromStripe = new URLSearchParams(window.location.search).has("upgraded");
       let latest = first;
       for (let i = 0; fromStripe && latest?.plan === "free" && i < 6 && !cancelled; i++) {
         await new Promise((r) => setTimeout(r, 2000));
@@ -262,8 +263,8 @@ function ResultCard({ result }: { result: QualificationResult }) {
         <section>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Red flags</h3>
           <ul className="mt-2 flex flex-wrap gap-2">
-            {result.red_flags.map((f) => (
-              <li key={f} className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+            {result.red_flags.map((f, i) => (
+              <li key={`${i}-${f}`}className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                 {f}
               </li>
             ))}

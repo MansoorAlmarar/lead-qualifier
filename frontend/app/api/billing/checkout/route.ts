@@ -19,6 +19,14 @@ export async function POST(request: Request) {
   if (existing && (existing.status === "active" || existing.status === "trialing")) {
     return Response.json({ error: "You already have a Pro subscription." }, { status: 409 });
   }
+  // A failed payment still has a live subscription behind it. A second checkout would create a
+  // second subscription, so send the user to the billing portal to fix the card instead.
+  if (existing?.status === "past_due") {
+    return Response.json(
+      { error: "Your last payment failed. Update your card in the billing portal.", code: "past_due" },
+      { status: 409 },
+    );
+  }
 
   try {
     let customerId = existing?.stripe_customer_id;
